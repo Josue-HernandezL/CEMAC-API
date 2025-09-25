@@ -7,6 +7,7 @@ const { admin, db } = require('./firebaseConfig');
 
 // Importar rutas
 const authRoutes = require('./backend/routes/authRoutes');
+const inventoryRoutes = require('./backend/routes/inventoryRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -16,14 +17,22 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Logging middleware
+// Logging middleware mejorado
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  if (process.env.NODE_ENV !== 'test') {
+    const timestamp = new Date().toISOString();
+    const method = req.method;
+    const path = req.path;
+    const ip = req.ip || req.connection.remoteAddress;
+    
+    console.log(`🌐 [${timestamp}] ${method} ${path} - IP: ${ip}`);
+  }
   next();
 });
 
 // Rutas
 app.use('/auth', authRoutes);
+app.use('/inventory', inventoryRoutes);
 
 // Ruta de prueba
 app.get('/', (req, res) => {
@@ -45,17 +54,25 @@ app.use((req, res, next) => {
 
 // Manejo de errores global
 app.use((error, req, res, next) => {
-  console.error('Error:', error);
+  // Mostrar errores en desarrollo y producción, solo silenciar en tests automatizados
+  if (process.env.NODE_ENV !== 'test') {
+    console.error('🚨 Error del servidor:', error.message || error);
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Stack trace:', error.stack);
+    }
+  }
   res.status(500).json({ 
     error: 'Error interno del servidor',
     message: process.env.NODE_ENV === 'development' ? error.message : 'Error interno'
   });
 });
 
-// Iniciar servidor
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor CEMAC-API ejecutándose en puerto ${PORT}`);
-  console.log(`📱 API disponible en: http://localhost:${PORT}`);
-});
+// Iniciar servidor solo si no estamos en modo test
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`🚀 Servidor CEMAC-API ejecutándose en puerto ${PORT}`);
+    console.log(`📱 API disponible en: http://localhost:${PORT}`);
+  });
+}
 
 module.exports = app;

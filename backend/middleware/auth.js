@@ -60,7 +60,10 @@ const verifyFirebaseToken = async (req, res, next) => {
     
     next();
   } catch (error) {
-    console.error('Error verificando token:', error);
+    // Mostrar errores en desarrollo y producción, solo silenciar en tests automatizados
+    if (process.env.NODE_ENV !== 'test') {
+      console.error('❌ Error verificando token:', error.message || error);
+    }
     
     if (error.code === 'auth/id-token-expired') {
       return res.status(401).json({ error: 'Token expirado' });
