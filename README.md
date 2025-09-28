@@ -1,74 +1,104 @@
-# CEMAC API - Sistema de Autenticación
+# CEMAC API - Sistema Completo
 
-API REST con autenticación Firebase que permite que solo un administrador pueda registrar usuarios en el sistema.
+API REST con autenticación Firebase y sistema de gestión de inventario.
 
 ## 🚀 Características
 
+### Sistema de Autenticación
 - ✅ Autenticación con Firebase Auth
 - ✅ Solo administradores pueden registrar usuarios
 - ✅ Gestión de sesiones con tokens Firebase
 - ✅ Recuperación de contraseña
-- ✅ Base de datos Firebase Realtime Database
-- ✅ Middleware de autorización
+- ✅ Middleware de autorización por roles
+
+### Sistema de Inventario
+- ✅ CRUD completo de productos
+- ✅ Gestión de stock con historial de movimientos
+- ✅ Subida de imágenes a Cloudinary
+- ✅ Filtros avanzados y búsqueda
+- ✅ Paginación y ordenamiento
+- ✅ Categorización de productos
+- ✅ Disponibilidad limitada e ilimitada
+
+### Tecnologías
+- ✅ Node.js + Express.js
+- ✅ Firebase Realtime Database
+- ✅ Cloudinary para imágenes
+- ✅ Multer para subida de archivos
+- ✅ Jest + Supertest para testing
 - ✅ Endpoints RESTful
-
-## 📋 Endpoints Disponibles
-
-### Públicos (no requieren autenticación)
-- `POST /auth/login` - Iniciar sesión
-- `POST /auth/recover` - Recuperar contraseña
-
-### Protegidos (requieren token)
-- `GET /auth/profile` - Obtener perfil del usuario
-- `PUT /auth/profile` - Actualizar perfil del usuario
-- `GET /auth/verify` - Verificar token válido
-
-### Solo Administradores
-- `POST /auth/register` - Registrar nuevo usuario
 
 ## 🛠️ Instalación
 
 ### 1. Clonar y configurar
 
 ```bash
+# Clonar repositorio
+git clone [URL_DEL_REPOSITORIO]
+cd CEMAC-API
+
 # Instalar dependencias
 pnpm install
-
-# Copiar variables de entorno
-copy .env.example .env
 ```
 
-### 2. Configurar Firebase
+### 2. Configurar variables de entorno
 
-1. Ve a [Firebase Console](https://console.firebase.google.com/)
-2. Crea un proyecto o usa uno existente
-3. Descarga el archivo `serviceAccountKey.json`
-4. Colócalo en la raíz del proyecto
-5. Habilita Realtime Database en modo de prueba
-
-### 3. Configurar administrador inicial
-
-Edita el archivo `.env` con las credenciales del administrador:
+Crea un archivo `.env` en la raíz del proyecto:
 
 ```env
-ADMIN_EMAIL=admin@cemac.com
-ADMIN_PASSWORD=admin123456
+# Configuración del servidor
+PORT=3000
+NODE_ENV=development
+
+# Configuración del administrador inicial
+ADMIN_EMAIL=tu-email@gmail.com
+ADMIN_PASSWORD=tu-contraseña-segura
 ADMIN_FIRST_NAME=Administrador
 ADMIN_LAST_NAME=CEMAC
+
+# Firebase
+FIREBASE_DATABASE_URL=https://tu-proyecto-default-rtdb.firebaseio.com
+
+# JWT Secrets
+JWT_SECRET=tu_jwt_secret_super_seguro_aqui
+SESSION_SECRET=tu_session_secret_super_seguro_aqui
+
+# Configuración de CORS
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
+
+# Configuración de logs
+LOG_LEVEL=info
+
+# Cloudinary (para imágenes de productos)
+CLOUDINARY_CLOUD_NAME=tu-cloud-name
+CLOUDINARY_API_KEY=tu-api-key
+CLOUDINARY_API_SECRET=tu-api-secret
 ```
 
-### 4. Ejecutar configuración inicial
+### 3. Configurar Firebase
+
+1. Ve a [Firebase Console](https://console.firebase.google.com/)
+2. Crea un proyecto nuevo o selecciona uno existente
+3. Descarga el archivo `serviceAccountKey.json` y colócalo en la raíz del proyecto
+4. Habilita **Realtime Database**:
+   - Ve a "Realtime Database" en el menú lateral
+   - Crea una base de datos
+   - Copia la URL de tu base de datos a `FIREBASE_DATABASE_URL`
+
+### 4. Configurar Cloudinary
+
+1. Ve a [Cloudinary Console](https://cloudinary.com/console)
+2. Crea una cuenta o inicia sesión
+3. Copia Cloud Name, API Key y API Secret a tu archivo `.env`
+
+### 5. Ejecutar configuración inicial
 
 ```bash
+# Crear estructura de BD y usuario administrador
 pnpm run setup
 ```
 
-Este comando creará:
-- Usuario administrador inicial
-- Estructura de base de datos
-- Configuración inicial del sistema
-
-### 5. Iniciar servidor
+### 6. Iniciar servidor
 
 ```bash
 # Desarrollo
@@ -78,9 +108,54 @@ pnpm run dev
 pnpm start
 ```
 
+## 📋 Endpoints Disponibles
+
+### 🔐 Autenticación
+
+#### Públicos (no requieren autenticación)
+- `POST /auth/login` - Iniciar sesión
+- `POST /auth/recover` - Recuperar contraseña
+
+#### Protegidos (requieren token)
+- `GET /auth/profile` - Obtener perfil del usuario
+- `PUT /auth/profile` - Actualizar perfil del usuario
+- `GET /auth/verify` - Verificar token válido
+
+#### Solo Administradores
+- `POST /auth/register` - Registrar nuevo usuario
+
+### 📦 Inventario
+
+#### Lectura (usuarios y administradores)
+- `GET /inventory` - Listar productos con filtros
+- `GET /inventory/:id` - Obtener producto específico
+- `GET /inventory/:id/history` - Historial de movimientos de stock
+
+#### Escritura (solo administradores)
+- `POST /inventory` - Crear nuevo producto
+- `PUT /inventory/:id` - Actualizar producto
+- `DELETE /inventory/:id` - Eliminar producto (soft delete)
+- `POST /inventory/:id/stock` - Actualizar stock (entrada/salida)
+
 ## 📡 Uso de la API
 
-### Login (POST /auth/login)
+### Headers requeridos
+
+Para rutas protegidas:
+```
+Authorization: Bearer YOUR_FIREBASE_TOKEN
+Content-Type: application/json
+```
+
+Para subida de archivos:
+```
+Authorization: Bearer YOUR_FIREBASE_TOKEN
+Content-Type: multipart/form-data
+```
+
+### 🔐 Ejemplos de Autenticación
+
+#### Login (POST /auth/login)
 
 ```bash
 curl -X POST http://localhost:3000/auth/login \
@@ -139,51 +214,229 @@ curl -X POST http://localhost:3000/auth/recover \
   }'
 ```
 
-## 🔧 Configuración Avanzada
+### 📦 Ejemplos de Inventario
 
-### Variables de Entorno
+#### Listar Productos (GET /inventory)
 
-```env
-# Servidor
-PORT=3000
-NODE_ENV=development
+```bash
+# Listar todos los productos
+curl -X GET http://localhost:3000/inventory \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
 
-# Administrador inicial
-ADMIN_EMAIL=admin@cemac.com
-ADMIN_PASSWORD=admin123456
-ADMIN_FIRST_NAME=Administrador
-ADMIN_LAST_NAME=CEMAC
-
-# Opcional
-JWT_SECRET=tu_jwt_secret
-SESSION_SECRET=tu_session_secret
-ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
-LOG_LEVEL=info
+# Con filtros
+curl -X GET "http://localhost:3000/inventory?search=ejemplo&category=electronics&availability=limited&minPrice=10&maxPrice=100&page=1&limit=10&sortBy=price&sortOrder=asc" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
 ```
 
-### Estructura de Base de Datos
+**Parámetros de consulta disponibles:**
+- `search` - Buscar en nombre y descripción
+- `category` - Filtrar por categoría
+- `availability` - `limited`, `unlimited`, `out-of-stock`
+- `minPrice` / `maxPrice` - Rango de precios
+- `page` / `limit` - Paginación
+- `sortBy` - `name`, `price`, `createdAt`, `stock`
+- `sortOrder` - `asc`, `desc`
 
+**Respuesta:**
+```json
+{
+  "success": true,
+  "products": [
+    {
+      "id": "1234567890abcdef",
+      "name": "Producto Ejemplo",
+      "description": "Descripción del producto",
+      "price": 99.99,
+      "promotionalPrice": 79.99,
+      "availability": "limited",
+      "category": "electronics",
+      "stock": 50,
+      "imageUrl": "https://res.cloudinary.com/...",
+      "isActive": true,
+      "createdAt": "2025-09-24T...",
+      "updatedAt": "2025-09-24T...",
+      "createdBy": "user_uid"
+    }
+  ],
+  "pagination": {
+    "currentPage": 1,
+    "totalPages": 5,
+    "totalProducts": 47,
+    "hasNextPage": true,
+    "hasPrevPage": false,
+    "limit": 10,
+    "offset": 0
+  },
+  "filters": {
+    "search": "ejemplo",
+    "category": "electronics",
+    "sortBy": "price",
+    "sortOrder": "asc"
+  },
+  "message": "Se encontraron 47 productos"
+}
 ```
-/
-├── users/
-│   └── {uid}/
-│       ├── email: string
-│       ├── role: "admin" | "user"
-│       ├── firstName: string
-│       ├── lastName: string
-│       ├── isActive: boolean
-│       ├── createdAt: timestamp
-│       ├── updatedAt: timestamp
-│       └── lastLogin: timestamp
-├── config/
-│   ├── settings/
-│   └── roles/
-└── recoveryRequests/
-    └── {uid}/
-        ├── email: string
-        ├── requestedAt: timestamp
-        ├── resetLink: string
-        └── used: boolean
+
+### Crear Producto (POST /inventory)
+
+**⚠️ Solo administradores**
+
+```bash
+# Sin imagen
+curl -X POST http://localhost:3000/inventory \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Nuevo Producto",
+    "description": "Descripción detallada del producto",
+    "price": 199.99,
+    "promotionalPrice": 149.99,
+    "availability": "limited",
+    "category": "electronics",
+    "stock": 25
+  }'
+
+# Con imagen (usar multipart/form-data)
+curl -X POST http://localhost:3000/inventory \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -F "name=Producto con Imagen" \
+  -F "description=Producto con imagen adjunta" \
+  -F "price=299.99" \
+  -F "availability=limited" \
+  -F "stock=10" \
+  -F "category=gadgets" \
+  -F "image=@/ruta/a/imagen.jpg"
+```
+
+**Campos requeridos:**
+- `name` - Nombre del producto
+- `description` - Descripción
+- `price` - Precio base
+- `availability` - `limited` o `unlimited`
+
+**Campos opcionales:**
+- `promotionalPrice` - Precio promocional
+- `category` - Categoría del producto
+- `stock` - Stock inicial (requerido si availability es "limited")
+- `image` - Archivo de imagen (máximo 5MB)
+
+### Obtener Producto (GET /inventory/:id)
+
+```bash
+curl -X GET http://localhost:3000/inventory/1234567890abcdef \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+```
+
+### Actualizar Producto (PUT /inventory/:id)
+
+**⚠️ Solo administradores**
+
+```bash
+curl -X PUT http://localhost:3000/inventory/1234567890abcdef \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Producto Actualizado",
+    "price": 249.99,
+    "promotionalPrice": null
+  }'
+```
+
+### Eliminar Producto (DELETE /inventory/:id)
+
+**⚠️ Solo administradores - Soft Delete**
+
+```bash
+curl -X DELETE http://localhost:3000/inventory/1234567890abcdef \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+### Actualizar Stock (POST /inventory/:id/stock)
+
+**⚠️ Solo administradores**
+
+```bash
+# Entrada de stock
+curl -X POST http://localhost:3000/inventory/1234567890abcdef/stock \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "type": "entrada",
+    "quantity": 50,
+    "reason": "Reposición de inventario"
+  }'
+
+# Salida de stock
+curl -X POST http://localhost:3000/inventory/1234567890abcdef/stock \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "type": "salida",
+    "quantity": 10,
+    "reason": "Venta directa"
+  }'
+```
+
+**Campos requeridos:**
+- `type` - `entrada` o `salida`
+- `quantity` - Cantidad (número positivo)
+- `reason` - Motivo del movimiento
+
+### Historial de Stock (GET /inventory/:id/history)
+
+```bash
+curl -X GET "http://localhost:3000/inventory/1234567890abcdef/history?page=1&limit=10" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "movements": [
+    {
+      "id": "movement_id",
+      "productId": "1234567890abcdef",
+      "type": "entrada",
+      "quantity": 50,
+      "reason": "Stock inicial",
+      "userId": "admin_uid",
+      "timestamp": "2025-09-24T17:32:18.888Z",
+      "date": "24/9/2025"
+    }
+  ],
+  "stats": {
+    "totalMovements": 3,
+    "totalEntradas": 75,
+    "totalSalidas": 15
+  },
+  "pagination": {
+    "currentPage": 1,
+    "totalPages": 1,
+    "totalMovements": 3,
+    "hasNextPage": false,
+    "hasPrevPage": false,
+    "limit": 10,
+    "offset": 0
+  },
+  "message": "Historial obtenido exitosamente"
+}
+```
+
+## 🧪 Testing en servidor de prueba
+
+```bash
+# Ejecutar todas las pruebas
+pnpm test
+
+# Pruebas específicas de inventario
+pnpm test -- inventory
+
+# Pruebas con cobertura de código
+pnpm test -- --coverage
+
+# Modo watch (recarga automática)
+pnpm test -- --watch
 ```
 
 ## 🔐 Seguridad
@@ -192,23 +445,40 @@ LOG_LEVEL=info
 - Middleware de autenticación en todas las rutas protegidas
 - Validación de permisos por roles
 - Verificación de usuarios activos
-- Hash de contraseñas con bcrypt (backup)
+- Soft delete para mantener integridad de datos
 
-## 🧪 Testing
-
-Usa herramientas como Postman, Insomnia o curl para probar los endpoints.
-
-### Headers requeridos para rutas protegidas:
-```
-Authorization: Bearer YOUR_FIREBASE_TOKEN
-Content-Type: application/json
-```
-
-## 📝 Scripts Disponibles
+## � Scripts Disponibles
 
 - `pnpm start` - Iniciar en producción
 - `pnpm run dev` - Desarrollo con nodemon
 - `pnpm run setup` - Configuración inicial de BD y admin
+- `pnpm test` - Ejecutar pruebas
+- `pnpm test -- --coverage` - Pruebas con cobertura
+
+## 🔧 Estructura del Proyecto
+
+```
+CEMAC-API/
+├── backend/
+│   ├── controllers/
+│   │   ├── authController.js      # Lógica de autenticación
+│   │   └── inventoryController.js # Lógica de inventario
+│   ├── middleware/
+│   │   └── auth.js                # Middleware de autenticación
+│   ├── routes/
+│   │   ├── authRoutes.js          # Rutas de autenticación
+│   │   └── inventoryRoutes.js     # Rutas de inventario
+│   └── scripts/
+│       ├── setupDatabase.js       # Configuración inicial
+│       └── updateAdminPassword.js # Actualizar contraseña admin
+├── test/
+│   └── inventory.test.js          # Pruebas del sistema
+├── .env                           # Variables de entorno
+├── firebaseConfig.js              # Configuración Firebase
+├── index.js                       # Servidor principal
+├── package.json                   # Dependencias
+└── serviceAccountKey.json         # Credenciales Firebase
+```
 
 
 
