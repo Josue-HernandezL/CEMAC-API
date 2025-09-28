@@ -288,11 +288,93 @@ const updateProfile = async (req, res) => {
   }
 };
 
+// GET ALL USERS - Solo administradores pueden ver todos los usuarios
+const getAllUsers = async (req, res) => {
+  try {
+    // Verificar que el usuario autenticado sea administrador (ya verificado por middleware)
+    
+    // Obtener todos los usuarios de Realtime Database
+    const usersRef = db.ref('users');
+    const usersSnapshot = await usersRef.once('value');
+    const usersData = usersSnapshot.val();
+
+    if (!usersData) {
+      return res.json({
+        success: true,
+        users: [],
+        message: 'No hay usuarios registrados'
+      });
+    }
+
+    // Convertir objeto a array y agregar información adicional de Firebase Auth
+    const users = [];
+    
+    for (const uid in usersData) {
+      try {
+        // Obtener información adicional de Firebase Auth
+        const userRecord = await auth.getUser(uid);
+        
+        const userData = usersData[uid];
+        
+        users.push({
+          uid: uid,
+          email: userData.email || userRecord.email,
+          firstName: userData.firstName || '',
+          lastName: userData.lastName || '',
+          role: userData.role || 'user',
+          isActive: userData.isActive !== false,
+          createdAt: userData.createdAt || null,
+          lastLogin: userData.lastLogin || null,
+          emailVerified: userRecord.emailVerified || false
+        });
+      } catch (authError) {
+        // Si hay error obteniendo datos de Firebase Auth, usar solo datos de Database
+        console.warn(`Error obteniendo datos de Auth para usuario ${uid}:`, authError.message);
+        
+        const userData = usersData[uid];
+        users.push({
+          uid: uid,
+          email: userData.email || 'N/A',
+          firstName: userData.firstName || '',
+          lastName: userData.lastName || '',
+          role: userData.role || 'user',
+          isActive: userData.isActive !== false,
+          createdAt: userData.createdAt || null,
+          lastLogin: userData.lastLogin || null,
+          emailVerified: false
+        });
+      }
+    }
+
+    // Ordenar usuarios por fecha de creación (más recientes primero)
+    users.sort((a, b) => {
+      if (!a.createdAt) return 1;
+      if (!b.createdAt) return -1;
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    });
+
+    res.json({
+      success: true,
+      users: users,
+      message: 'Usuarios obtenidos exitosamente'
+    });
+
+  } catch (error) {
+    console.error('Error obteniendo todos los usuarios:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Error interno del servidor',
+      message: 'No se pudieron obtener los usuarios'
+    });
+  }
+};
+
 module.exports = {
   login,
   register,
   recover,
   getProfile,
   updateProfile,
+  getAllUsers,
   createUserWithEmailAndPassword
 };

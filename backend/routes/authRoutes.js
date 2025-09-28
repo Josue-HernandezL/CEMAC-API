@@ -4,7 +4,8 @@ const {
   register, 
   recover, 
   getProfile, 
-  updateProfile 
+  updateProfile,
+  getAllUsers
 } = require('../controllers/authController');
 const { 
   authenticateUser, 
@@ -23,6 +24,7 @@ router.put('/profile', authenticateUser, updateProfile);
 
 // Rutas de administrador (requieren autenticación + permisos de admin)
 router.post('/register', authenticateAdmin, register);
+router.get('/users', authenticateAdmin, getAllUsers);
 
 // Ruta de prueba para verificar token
 router.get('/verify', authenticateUser, (req, res) => {

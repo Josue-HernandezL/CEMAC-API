@@ -123,6 +123,7 @@ pnpm start
 
 #### Solo Administradores
 - `POST /auth/register` - Registrar nuevo usuario
+- `GET /auth/users` - Listar todos los usuarios
 
 ### 📦 Inventario
 
@@ -196,6 +197,66 @@ curl -X POST http://localhost:3000/auth/register \
     "role": "user"
   }'
 ```
+
+### Listar Todos los Usuarios (GET /auth/users)
+
+**⚠️ Solo administradores**
+
+```bash
+curl -X GET http://localhost:3000/auth/users \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json"
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "users": [
+    {
+      "uid": "user123abc",
+      "email": "usuario@cemac.com",
+      "firstName": "Juan",
+      "lastName": "Pérez",
+      "role": "user",
+      "isActive": true,
+      "createdAt": "2024-01-15T10:30:00Z",
+      "lastLogin": "2024-01-20T15:45:00Z",
+      "emailVerified": false
+    },
+    {
+      "uid": "admin456def",
+      "email": "admin@cemac.com",
+      "firstName": "Administrador",
+      "lastName": "CEMAC",
+      "role": "admin",
+      "isActive": true,
+      "createdAt": "2024-01-01T08:00:00Z",
+      "lastLogin": "2024-01-28T14:30:00Z",
+      "emailVerified": true
+    }
+  ],
+  "message": "Usuarios obtenidos exitosamente"
+}
+```
+
+**Descripción:**
+- Solo usuarios con `role: 'admin'` pueden acceder a este endpoint
+- Retorna todos los usuarios registrados en el sistema
+- Incluye información completa del perfil de cada usuario
+- Los usuarios se ordenan por fecha de creación (más recientes primero)
+- Combina datos de Firebase Auth y Realtime Database
+
+**Campos incluidos por usuario:**
+- `uid` - ID único del usuario
+- `email` - Dirección de correo electrónico
+- `firstName` - Nombre del usuario
+- `lastName` - Apellido del usuario
+- `role` - Rol del usuario (`admin` o `user`)
+- `isActive` - Estado activo del usuario
+- `createdAt` - Fecha de creación de la cuenta
+- `lastLogin` - Fecha del último inicio de sesión
+- `emailVerified` - Estado de verificación del email
 
 ### Obtener Perfil (GET /auth/profile)
 
