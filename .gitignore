@@ -6,8 +6,6 @@ firebase-rules.json
 # Archivos de configuración sensibles
 serviceAccountKey.json
 .env
-.env.local
-.env.*.local
 
 # Archivos de testing y cobertura
 coverage/
