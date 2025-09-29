@@ -643,6 +643,207 @@ curl -X GET "http://localhost:3000/inventory/1234567890abcdef/history?page=1&lim
 }
 ```
 
+## 📊 Módulo de Análisis de Ventas e Inventario
+
+El módulo de análisis proporciona estadísticas avanzadas y reportes tanto para ventas como para inventario, facilitando la toma de decisiones empresariales.
+
+### 🛒 Endpoints de Análisis de Ventas
+
+#### Obtener Estadísticas Completas (GET /analysis/sales)
+
+Devuelve estadísticas diarias de la última semana, mensuales del último semestre y productos más vendidos.
+
+```bash
+curl -X GET http://localhost:3000/analysis/sales \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "data": {
+    "daily": {
+      "labels": ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"],
+      "values": [1500, 2300, 1800, 2100, 2800, 3200, 2600]
+    },
+    "monthly": {
+      "labels": ["Abr", "May", "Jun", "Jul", "Ago", "Sep"],
+      "values": [45000, 52000, 48000, 51000, 54000, 58000]
+    },
+    "topProducts": [
+      {
+        "id": "prod123",
+        "name": "Libretas de cuadros",
+        "sales": 150,
+        "revenue": 4500
+      }
+    ]
+  },
+  "message": "Estadísticas obtenidas exitosamente"
+}
+```
+
+#### Estadísticas por Período Personalizado (GET /analysis/sales/custom)
+
+```bash
+curl -X GET "http://localhost:3000/analysis/sales/custom?startDate=2025-09-01&endDate=2025-09-30&groupBy=month" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+#### Resumen Ejecutivo (GET /analysis/sales/summary)
+
+```bash
+curl -X GET http://localhost:3000/analysis/sales/summary \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### 📦 Endpoints de Análisis de Inventario
+
+#### Obtener Análisis Completo de Inventario (GET /analysis/inventory)
+
+Proporciona niveles de stock actuales, productos con bajo stock y distribución por categorías.
+
+```bash
+curl -X GET http://localhost:3000/analysis/inventory \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "data": {
+    "stockLevels": {
+      "labels": ["Libretas", "Lápices", "Plumas", "Pegamento"],
+      "values": [120, 350, 200, 80]
+    },
+    "lowStock": [
+      {
+        "id": "prod456",
+        "name": "Pegamento escolar",
+        "currentStock": 80,
+        "minThreshold": 100
+      }
+    ],
+    "categoryDistribution": {
+      "Papelería": 45,
+      "Escolar": 30,
+      "Oficina": 25
+    }
+  },
+  "message": "Análisis de inventario obtenido exitosamente"
+}
+```
+
+**Características del análisis de inventario:**
+
+- **stockLevels**: Top 10 productos ordenados por nivel de stock
+- **lowStock**: Productos con stock por debajo del umbral mínimo
+- **categoryDistribution**: Distribución porcentual por categorías
+
+#### Obtener Análisis de Rotación (GET /analysis/inventory/rotation)
+
+Analiza la rotación de productos basada en las ventas de los últimos 30 días.
+
+```bash
+curl -X GET http://localhost:3000/analysis/inventory/rotation \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "data": {
+    "rotationAnalysis": [
+      {
+        "id": "prod123",
+        "name": "Producto A",
+        "currentStock": 100,
+        "soldLast30Days": 45,
+        "rotationRate": 45.0,
+        "category": "Papelería"
+      }
+    ],
+    "summary": {
+      "totalProducts": 25,
+      "averageRotation": 32.5,
+      "highRotation": 8,
+      "lowRotation": 12
+    }
+  },
+  "message": "Análisis de rotación de inventario obtenido exitosamente"
+}
+```
+
+**Métricas de rotación:**
+- **rotationRate**: Porcentaje de stock vendido en 30 días
+- **highRotation**: Productos con rotación > 50%
+- **lowRotation**: Productos con rotación < 10%
+
+### 🎯 Casos de Uso del Análisis
+
+**1. Dashboard Ejecutivo**
+```bash
+# Resumen de ventas
+curl -X GET http://localhost:3000/analysis/sales/summary \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# Estado del inventario
+curl -X GET http://localhost:3000/analysis/inventory \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**2. Gestión de Stock**
+```bash
+# Identificar productos con bajo stock
+curl -X GET http://localhost:3000/analysis/inventory \
+  -H "Authorization: Bearer YOUR_TOKEN" | jq '.data.lowStock'
+
+# Analizar rotación para reabastecimiento
+curl -X GET http://localhost:3000/analysis/inventory/rotation \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**3. Análisis de Categorías**
+```bash
+# Ver distribución por categorías
+curl -X GET http://localhost:3000/analysis/inventory \
+  -H "Authorization: Bearer YOUR_TOKEN" | jq '.data.categoryDistribution'
+```
+
+### ⚠️ Validaciones de Análisis
+
+**Errores Comunes:**
+
+1. **Sin autorización:**
+```json
+{
+  "error": "Token de acceso requerido"
+}
+```
+
+2. **Token inválido:**
+```json
+{
+  "error": "Token no válido"
+}
+```
+
+3. **Datos insuficientes:**
+```json
+{
+  "success": true,
+  "data": {
+    "stockLevels": {"labels": [], "values": []},
+    "lowStock": [],
+    "categoryDistribution": {}
+  },
+  "message": "Análisis de inventario obtenido exitosamente"
+}
+```
+
 ## 🧪 Testing en servidor de prueba
 
 ```bash
