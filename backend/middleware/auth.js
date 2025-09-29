@@ -104,6 +104,83 @@ const requireActiveUser = (req, res, next) => {
 // Middleware combinado: token válido + usuario activo
 const authenticateUser = [verifyFirebaseToken, requireActiveUser];
 
+// Middleware de seguridad requerido - Verificación directa de admin
+const requireAdminAccess = async (req, res, next) => {
+  try {
+    // Verificar que el usuario esté autenticado
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    
+    if (!token) {
+      return res.status(401).json({ error: 'Token de acceso requerido' });
+    }
+
+    let decodedToken;
+    let uid;
+
+    try {
+      // Primero intentar verificar como ID Token
+      decodedToken = await auth.verifyIdToken(token);
+      uid = decodedToken.uid;
+    } catch (error) {
+      if (error.code === 'auth/argument-error' && error.message.includes('custom token')) {
+        // Si es un custom token, necesitamos decodificarlo de otra manera
+        try {
+          const jwt = require('jsonwebtoken');
+          const decoded = jwt.decode(token);
+          
+          if (!decoded || !decoded.uid) {
+            throw new Error('Custom token inválido');
+          }
+          
+          uid = decoded.uid;
+          decodedToken = { uid: decoded.uid, ...decoded };
+        } catch (customTokenError) {
+          throw new Error('Token inválido');
+        }
+      } else {
+        throw error;
+      }
+    }
+
+    // Verificar que sea administrador
+    const userRef = db.ref(`users/${uid}`);
+    const userData = (await userRef.once('value')).val();
+
+    if (!userData) {
+      return res.status(404).json({ error: 'Usuario no encontrado en la base de datos' });
+    }
+
+    if (userData.role !== 'admin') {
+      return res.status(403).json({ 
+        error: 'Acceso denegado. Se requieren permisos de administrador' 
+      });
+    }
+
+    // Agregar información del usuario al request
+    req.user = {
+      uid: decodedToken.uid,
+      email: userData.email,
+      role: userData.role,
+      isActive: userData.isActive !== false,
+      ...userData
+    };
+
+    next();
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.error('❌ Error en middleware de admin:', error.message || error);
+    }
+    
+    if (error.code === 'auth/id-token-expired') {
+      return res.status(401).json({ error: 'Token expirado' });
+    } else if (error.code === 'auth/invalid-id-token') {
+      return res.status(401).json({ error: 'Token inválido' });
+    }
+    
+    return res.status(401).json({ error: 'Token no válido' });
+  }
+};
+
 // Middleware combinado: token válido + usuario activo + admin
 const authenticateAdmin = [verifyFirebaseToken, requireActiveUser, requireAdmin];
 
@@ -112,5 +189,6 @@ module.exports = {
   requireAdmin,
   requireActiveUser,
   authenticateUser,
-  authenticateAdmin
+  authenticateAdmin,
+  requireAdminAccess // Nuevo middleware de seguridad requerido
 };
