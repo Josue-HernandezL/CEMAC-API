@@ -28,6 +28,16 @@ API REST con autenticación Firebase y sistema de gestión de inventario.
 - ✅ Categorización de productos
 - ✅ Disponibilidad limitada e ilimitada
 
+### Sistema de Ventas
+- ✅ CRUD completo de ventas
+- ✅ Registro de ventas con múltiples productos
+- ✅ Cálculo automático de totales, IVA y descuentos
+- ✅ Actualización automática de stock del inventario
+- ✅ Filtros por fecha, cliente, vendedor
+- ✅ Estados de venta (pendiente, completada, cancelada, devuelta)
+- ✅ Reportes y estadísticas de ventas
+- ✅ Integración completa con el sistema de inventario
+
 ### Tecnologías
 - ✅ Node.js + Express.js
 - ✅ Firebase Realtime Database
@@ -148,6 +158,16 @@ pnpm start
 - `PUT /inventory/:id` - Actualizar producto
 - `DELETE /inventory/:id` - Eliminar producto (soft delete)
 - `POST /inventory/:id/stock` - Actualizar stock (entrada/salida)
+
+### 💰 Ventas
+
+#### Todos los usuarios autenticados
+- `POST /sales` - Crear nueva venta
+- `GET /sales` - Listar ventas con filtros
+- `GET /sales/:id` - Obtener venta específica
+- `PUT /sales/:id/status` - Actualizar estado de venta
+- `GET /sales/reports/summary` - Generar reportes de ventas
+- `GET /sales/products/search` - Buscar productos disponibles para venta
 
 ## 📡 Uso de la API
 
@@ -643,6 +663,586 @@ curl -X GET "http://localhost:3000/inventory/1234567890abcdef/history?page=1&lim
 }
 ```
 
+### 💰 Ejemplos de Ventas
+
+#### Crear Nueva Venta (POST /sales)
+
+**Ejemplo 1: Venta sin IVA (precios ya incluyen impuestos)**
+```bash
+curl -X POST http://localhost:3000/sales \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN" \
+  -d '{
+    "cliente": "Juan Pérez",
+    "vendedor": "María García",
+    "descuento": 10,
+    "products": [
+      {
+        "productId": "1234567890abcdef",
+        "quantity": 2,
+        "price": 99.99
+      },
+      {
+        "productId": "0987654321fedcba",
+        "quantity": 1,
+        "price": 149.99
+      }
+    ],
+    "paymentMethod": "tarjeta",
+    "notes": "Cliente frecuente - aplicar descuento especial"
+  }'
+```
+
+**Ejemplo 2: Venta con IVA del 16%**
+```bash
+curl -X POST http://localhost:3000/sales \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN" \
+  -d '{
+    "cliente": "María González",
+    "vendedor": "Carlos López",
+    "descuento": 5,
+    "iva": 16,
+    "products": [
+      {
+        "productId": "1234567890abcdef",
+        "quantity": 1,
+        "price": 200.00
+      }
+    ],
+    "paymentMethod": "efectivo",
+    "notes": "Venta con IVA del 16%"
+  }'
+```
+
+**Ejemplo 3: Venta sin descuento y sin IVA**
+```bash
+curl -X POST http://localhost:3000/sales \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN" \
+  -d '{
+    "cliente": "Ana Rodríguez",
+    "vendedor": "Luis Martín",
+    "products": [
+      {
+        "productId": "1234567890abcdef",
+        "quantity": 3,
+        "price": 50.00
+      }
+    ],
+    "paymentMethod": "transferencia"
+  }'
+```
+
+**Respuesta del Ejemplo 1 (sin IVA):**
+```json
+{
+  "success": true,
+  "sale": {
+    "id": "sale_1234567890",
+    "cliente": "Juan Pérez",
+    "vendedor": "María García",
+    "products": [
+      {
+        "productId": "1234567890abcdef",
+        "productName": "Producto Ejemplo",
+        "quantity": 2,
+        "unitPrice": 99.99,
+        "totalPrice": 199.98,
+        "availability": "limited"
+      },
+      {
+        "productId": "0987654321fedcba",
+        "productName": "Otro Producto",
+        "quantity": 1,
+        "unitPrice": 149.99,
+        "totalPrice": 149.99,
+        "availability": "unlimited"
+      }
+    ],
+    "subtotal": 314.97,
+    "descuento": 10,
+    "discountAmount": 34.99,
+    "ivaPercentage": 0,
+    "ivaAmount": 0,
+    "total": 314.97,
+    "paymentMethod": "tarjeta",
+    "notes": "Cliente frecuente - aplicar descuento especial",
+    "status": "completada",
+    "createdAt": "2025-09-28T...",
+    "createdBy": "user_uid",
+    "date": "28/9/2025",
+    "timestamp": 1727563200000
+  },
+  "message": "Venta registrada exitosamente"
+}
+```
+
+**Respuesta del Ejemplo 2 (con IVA del 16%):**
+```json
+{
+  "success": true,
+  "sale": {
+    "id": "sale_2345678901",
+    "cliente": "María González",
+    "vendedor": "Carlos López",
+    "products": [
+      {
+        "productId": "1234567890abcdef",
+        "productName": "Producto Ejemplo",
+        "quantity": 1,
+        "unitPrice": 200.00,
+        "totalPrice": 200.00,
+        "availability": "limited"
+      }
+    ],
+    "subtotal": 190.00,
+    "descuento": 5,
+    "discountAmount": 10.00,
+    "ivaPercentage": 16,
+    "ivaAmount": 30.40,
+    "total": 220.40,
+    "paymentMethod": "efectivo",
+    "notes": "Venta con IVA del 16%",
+    "status": "completada",
+    "createdAt": "2025-09-28T...",
+    "createdBy": "user_uid",
+    "date": "28/9/2025",
+    "timestamp": 1727563200000
+  },
+  "message": "Venta registrada exitosamente"
+}
+```
+
+**Campos requeridos:**
+- `products` - Array de productos (mínimo 1)
+  - `productId` - ID del producto del inventario
+  - `quantity` - Cantidad a vender
+  - `price` - Precio unitario
+
+**Campos opcionales:**
+- `cliente` - Nombre del cliente (default: "Cliente General")
+- `vendedor` - Nombre del vendedor (default: "No asignado")
+- `descuento` - Porcentaje de descuento (0-100, default: 0)
+- `iva` - Porcentaje de IVA a aplicar (0-100, default: 0)
+- `paymentMethod` - Método de pago (default: "efectivo")
+- `notes` - Notas adicionales
+
+**💡 Importante sobre IVA y Descuentos:**
+- **Sin IVA (default)**: Si no envías el campo `iva` o lo envías como `0`, se asume que los precios ya incluyen todos los impuestos
+- **Con IVA**: Si envías `iva: 16`, se aplicará 16% de IVA sobre el subtotal después del descuento
+- **Descuentos**: Se aplican antes del IVA. El cálculo es: `(Total - Descuento) + IVA`
+
+**Ejemplos de cálculo:**
+```
+Producto: $100.00 x 1
+Descuento: 10%
+IVA: 16%
+
+Sin IVA: $100.00 - $10.00 = $90.00
+Con IVA: ($100.00 - $10.00) + ($90.00 * 0.16) = $90.00 + $14.40 = $104.40
+```
+
+**📋 Casos de Uso Comunes:**
+
+1. **Negocio con precios ya con impuestos incluidos** (restaurantes, retail)
+   ```json
+   {
+     "cliente": "Cliente",
+     "products": [{"productId": "abc", "quantity": 1, "price": 100.00}],
+     "descuento": 5
+     // No enviar campo "iva" - total será $95.00
+   }
+   ```
+
+2. **Negocio B2B que maneja IVA por separado**
+   ```json
+   {
+     "cliente": "Empresa XYZ",
+     "products": [{"productId": "abc", "quantity": 1, "price": 100.00}],
+     "descuento": 0,
+     "iva": 16
+     // Total será $116.00 (100 + 16% IVA)
+   }
+   ```
+
+3. **Venta con descuento e IVA**
+   ```json
+   {
+     "cliente": "Cliente VIP",
+     "products": [{"productId": "abc", "quantity": 1, "price": 100.00}],
+     "descuento": 10,
+     "iva": 16
+     // Total será $104.40 ((100 - 10%) + 16% IVA sobre subtotal)
+   }
+   ```
+
+#### Listar Ventas (GET /sales)
+
+```bash
+# Listar todas las ventas
+curl -X GET http://localhost:3000/sales \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+
+# Con filtros
+curl -X GET "http://localhost:3000/sales?startDate=2025-09-01&endDate=2025-09-30&vendedor=María&page=1&limit=10&sortBy=total&sortOrder=desc" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+```
+
+**Parámetros de consulta disponibles:**
+- `page` / `limit` - Paginación
+- `startDate` / `endDate` - Filtro por rango de fechas (YYYY-MM-DD)
+- `vendedor` - Filtrar por nombre del vendedor
+- `cliente` - Filtrar por nombre del cliente
+- `status` - Filtrar por estado (pendiente, completada, cancelada, devuelta)
+- `sortBy` - Ordenar por campo (createdAt, total, cliente, vendedor)
+- `sortOrder` - Orden (asc, desc)
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "sales": [
+    {
+      "id": "sale_1234567890",
+      "cliente": "Juan Pérez",
+      "vendedor": "María García",
+      "products": [...],
+      "subtotal": 314.97,
+      "total": 324.78,
+      "status": "completada",
+      "createdAt": "2025-09-28T...",
+      "date": "28/9/2025"
+    }
+  ],
+  "pagination": {
+    "currentPage": 1,
+    "totalPages": 5,
+    "totalSales": 47,
+    "hasNextPage": true,
+    "hasPrevPage": false,
+    "limit": 10
+  },
+  "statistics": {
+    "totalRevenue": 15248.30,
+    "averageSale": 324.22,
+    "totalSales": 47
+  },
+  "message": "Se encontraron 47 ventas"
+}
+```
+
+#### Obtener Venta Específica (GET /sales/:id)
+
+```bash
+curl -X GET http://localhost:3000/sales/sale_1234567890 \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+```
+
+#### Actualizar Estado de Venta (PUT /sales/:id/status)
+
+```bash
+curl -X PUT http://localhost:3000/sales/sale_1234567890/status \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN" \
+  -d '{
+    "status": "cancelada"
+  }'
+```
+
+**Estados válidos:**
+- `pendiente` - Venta pendiente de completar
+- `completada` - Venta finalizada exitosamente
+- `cancelada` - Venta cancelada
+- `devuelta` - Venta devuelta
+
+#### Buscar Productos Disponibles para Venta (GET /sales/products/search)
+
+**Descripción:** Busca productos del inventario que están disponibles para la venta. Solo retorna productos activos y con stock disponible.
+
+```bash
+# Buscar todos los productos disponibles
+curl -X GET http://localhost:3000/sales/products/search \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+
+# Buscar productos con filtro de texto
+curl -X GET "http://localhost:3000/sales/products/search?search=laptop&limit=10" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+```
+
+**Parámetros de consulta:**
+- `search` - Buscar en nombre, descripción o categoría
+- `limit` - Número máximo de resultados (default: 10)
+- `includeStock` - Incluir información de stock (default: true)
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "products": [
+    {
+      "id": "1234567890abcdef",
+      "name": "Laptop Gaming",
+      "description": "Laptop para gaming de alta gama",
+      "price": 1299.99,
+      "promotionalPrice": 1199.99,
+      "category": "electronics",
+      "imageUrl": "https://res.cloudinary.com/...",
+      "availability": "limited",
+      "stock": 15,
+      "availableForSale": true,
+      "suggestedPrice": 1199.99,
+      "maxQuantity": 15
+    },
+    {
+      "id": "0987654321fedcba",
+      "name": "Mouse Inalámbrico",
+      "description": "Mouse inalámbrico ergonómico",
+      "price": 29.99,
+      "promotionalPrice": null,
+      "category": "electronics",
+      "imageUrl": null,
+      "availability": "unlimited",
+      "stock": null,
+      "availableForSale": true,
+      "suggestedPrice": 29.99,
+      "maxQuantity": 999
+    }
+  ],
+  "totalFound": 2,
+  "searchTerm": "laptop",
+  "message": "Se encontraron 2 productos disponibles para venta"
+}
+```
+
+**Características:**
+- ✅ Solo productos activos (`isActive: true`)
+- ✅ Solo productos con stock disponible (si tienen stock limitado)
+- ✅ Precio sugerido (promocional si existe, o precio regular)
+- ✅ Cantidad máxima disponible para venta
+- ✅ Información completa para mostrar en el frontend
+
+#### Generar Reporte de Ventas (GET /sales/reports/summary)
+
+```bash
+# Reporte general
+curl -X GET http://localhost:3000/sales/reports/summary \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+
+# Reporte con filtros
+curl -X GET "http://localhost:3000/sales/reports/summary?startDate=2025-09-01&endDate=2025-09-30&vendedor=María" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "report": {
+    "summary": {
+      "totalRevenue": 15248.30,
+      "totalSales": 47,
+      "averageSale": 324.22,
+      "period": {
+        "startDate": "2025-09-01",
+        "endDate": "2025-09-30"
+      }
+    },
+    "topProducts": [
+      {
+        "productId": "1234567890abcdef",
+        "productName": "Producto Más Vendido",
+        "totalQuantity": 125,
+        "totalRevenue": 12495.0
+      }
+    ],
+    "salesByVendedor": [
+      {
+        "vendedor": "María García",
+        "totalSales": 23,
+        "totalRevenue": 7420.50
+      },
+      {
+        "vendedor": "Carlos López",
+        "totalSales": 18,
+        "totalRevenue": 5827.80
+      }
+    ]
+  },
+  "message": "Reporte generado exitosamente"
+}
+```
+
+### ⚠️ Validaciones y Errores Comunes de Ventas
+
+#### Errores de Validación
+
+**1. Producto Inexistente**
+```json
+{
+  "success": false,
+  "message": "Producto con ID producto_inexistente no encontrado"
+}
+```
+
+**2. Stock Insuficiente**
+```json
+{
+  "success": false,
+  "message": "Stock insuficiente para Laptop Gaming. Stock disponible: 5"
+}
+```
+
+**3. Descuento Inválido**
+```json
+{
+  "success": false,
+  "message": "El descuento debe estar entre 0 y 100%"
+}
+```
+
+**4. IVA Inválido**
+```json
+{
+  "success": false,
+  "message": "El IVA debe estar entre 0 y 100%"
+}
+```
+
+**5. Producto Inactivo**
+```json
+{
+  "success": false,
+  "message": "Producto Laptop Antigua no está disponible"
+}
+```
+
+#### Códigos de Estado HTTP
+
+| Código | Descripción | Casos |
+|--------|-------------|-------|
+| `200` | Éxito | Operación completada exitosamente |
+| `201` | Creado | Venta creada exitosamente |
+| `400` | Solicitud Incorrecta | Datos inválidos, validaciones fallidas |
+| `401` | No Autorizado | Token faltante o inválido |
+| `403` | Prohibido | Sin permisos suficientes |
+| `404` | No Encontrado | Venta o producto no existe |
+| `500` | Error del Servidor | Error interno del sistema |
+
+### 🔄 Integración Automática con Inventario
+
+#### Flujo de Actualización de Stock
+
+Cuando se crea una venta, el sistema automáticamente:
+
+1. **Valida disponibilidad** de cada producto
+2. **Verifica stock suficiente** (solo productos limitados)
+3. **Actualiza stock** al confirmar la venta
+4. **Registra movimiento** en historial de inventario
+
+**Ejemplo de actualización automática:**
+```bash
+# Antes de la venta
+GET /inventory/prod_123
+# Respuesta: {"stock": 10}
+
+# Crear venta con 3 unidades
+POST /sales
+{
+  "products": [{"productId": "prod_123", "quantity": 3, "price": 100}]
+}
+
+# Después de la venta
+GET /inventory/prod_123
+# Respuesta: {"stock": 7}
+```
+
+#### Movimientos de Stock Registrados
+
+Cada venta genera automáticamente un movimiento de stock:
+
+```bash
+GET /inventory/prod_123/history
+```
+
+**Respuesta:**
+```json
+{
+  "movements": [
+    {
+      "type": "salida",
+      "quantity": 3,
+      "reason": "Venta",
+      "timestamp": "2025-09-28T...",
+      "userId": "user_uid"
+    }
+  ]
+}
+```
+
+### 📊 Métodos de Pago Soportados
+
+El sistema acepta los siguientes métodos de pago:
+
+| Método | Descripción | Ejemplo |
+|--------|-------------|---------|
+| `efectivo` | Pago en efectivo (default) | Ventas en mostrador |
+| `tarjeta` | Tarjeta de crédito/débito | Pagos con terminal POS |
+| `transferencia` | Transferencia bancaria | Pagos B2B |
+| `cheque` | Pago con cheque | Transacciones corporativas |
+| `digital` | Wallets digitales | PayPal, Apple Pay, etc. |
+
+### 🎯 Casos de Uso Avanzados
+
+#### 1. Venta Corporativa Completa
+```bash
+curl -X POST http://localhost:3000/sales \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "cliente": "Corporativo ABC S.A. de C.V.",
+    "vendedor": "Ejecutivo de Cuentas",
+    "products": [
+      {
+        "productId": "laptop_001",
+        "quantity": 10,
+        "price": 1200.00
+      },
+      {
+        "productId": "mouse_001", 
+        "quantity": 10,
+        "price": 25.00
+      }
+    ],
+    "descuento": 15,
+    "iva": 16,
+    "paymentMethod": "transferencia",
+    "notes": "Pedido corporativo - Facturación requerida"
+  }'
+```
+
+#### 2. Búsqueda Inteligente de Productos
+```bash
+# Buscar por categoría
+curl -X GET "http://localhost:3000/sales/products/search?search=electronics&limit=20" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# Buscar por nombre específico
+curl -X GET "http://localhost:3000/sales/products/search?search=laptop gaming&limit=5" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+#### 3. Reportes Avanzados con Filtros
+```bash
+# Reporte por período específico
+curl -X GET "http://localhost:3000/sales/reports/summary?startDate=2025-09-01&endDate=2025-09-30" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# Reporte por vendedor específico
+curl -X GET "http://localhost:3000/sales/reports/summary?vendedor=María García" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
 ## 🧪 Testing en servidor de prueba
 
 ```bash
@@ -652,11 +1252,34 @@ pnpm test
 # Pruebas específicas de inventario
 pnpm test -- inventory
 
+# Pruebas específicas de ventas
+pnpm test -- sales
+
 # Pruebas con cobertura de código
 pnpm test -- --coverage
 
 # Modo watch (recarga automática)
 pnpm test -- --watch
+```
+
+### 🔍 Validación de Endpoints con cURL
+
+**Verificar que el servidor esté funcionando:**
+```bash
+curl -X GET http://localhost:3000/
+```
+
+**Probar autenticación:**
+```bash
+curl -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "admin@cemac.com", "password": "admin123456"}'
+```
+
+**Verificar productos disponibles:**
+```bash
+curl -X GET http://localhost:3000/sales/products/search \
+  -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
 ## 🔐 Seguridad
@@ -712,17 +1335,21 @@ CEMAC-API/
 ├── backend/
 │   ├── controllers/
 │   │   ├── authController.js      # Lógica de autenticación
-│   │   └── inventoryController.js # Lógica de inventario
+│   │   ├── inventoryController.js # Lógica de inventario
+│   │   └── salesController.js     # Lógica de ventas
 │   ├── middleware/
 │   │   └── auth.js                # Middleware de autenticación + requireAdminAccess
 │   ├── routes/
 │   │   ├── authRoutes.js          # Rutas de autenticación
-│   │   └── inventoryRoutes.js     # Rutas de inventario
+│   │   ├── inventoryRoutes.js     # Rutas de inventario
+│   │   └── salesRoutes.js         # Rutas de ventas
 │   └── scripts/
 │       ├── setupDatabase.js       # Configuración inicial
+│       ├── setupSales.js          # Configuración del módulo de ventas
 │       └── updateAdminPassword.js # Actualizar contraseña admin
 ├── test/
-│   └── inventory.test.js          # Pruebas del sistema
+│   ├── inventory.test.js          # Pruebas del inventario
+│   └── sales.test.js              # Pruebas del sistema de ventas
 ├── .env                           # Variables de entorno
 ├── firebaseConfig.js              # Configuración Firebase
 ├── index.js                       # Servidor principal
@@ -757,6 +1384,164 @@ CEMAC-API/
 - Documentación técnica completa en `SECURITY-MIDDLEWARE.md`
 - Ejemplos de uso y respuestas de API actualizados
 - Guías de implementación y mejores prácticas
+
+### 🛡️ Configuración de Seguridad
+
+#### Variables de Entorno Requeridas
+
+```bash
+# .env (en desarrollo)
+FIREBASE_ADMIN_SDK_PATH=./serviceAccountKey.json
+JWT_SECRET=tu_clave_secreta_jwt
+NODE_ENV=development
+PORT=3000
+
+# .env.production (en producción)
+FIREBASE_ADMIN_SDK_PATH=/path/to/serviceAccountKey.json
+JWT_SECRET=clave_secreta_super_segura
+NODE_ENV=production
+PORT=3000
+```
+
+#### Mejores Prácticas de Seguridad
+
+1. **Tokens JWT**: Los tokens expiran en 24 horas
+2. **Validación de Datos**: Todos los endpoints validan entrada
+3. **Autenticación**: Middleware requerido en endpoints sensibles
+4. **Logs de Seguridad**: Todas las operaciones se registran
+5. **Rate Limiting**: Implementar en producción (recomendado)
+
+### 🚀 Despliegue en Producción
+
+#### Verificación Pre-despliegue
+
+```bash
+# 1. Ejecutar todas las pruebas
+pnpm test
+
+# 2. Linting del código
+pnpm run lint
+
+# 4. Construcción de producción
+pnpm run build
+```
+
+#### Configuración de Firebase Rules
+
+Asegúrate de tener las reglas de Firebase correctamente configuradas:
+
+```javascript
+// firebase-rules.json
+{
+  "rules": {
+    "inventory": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "sales": {
+      ".read": "auth != null", 
+      ".write": "auth != null"
+    },
+    "users": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    }
+  }
+}
+```
+
+### 📈 Monitoreo y Mantenimiento
+
+#### Métricas Clave a Monitorear
+
+- **Ventas por Día**: Endpoint `/sales/reports/summary`
+- **Stock Bajo**: Productos con stock < 10 unidades
+- **Errores de API**: Logs de errores 400/500
+- **Tiempo de Respuesta**: < 500ms para consultas
+- **Usuarios Activos**: Tokens válidos por día
+
+#### Tareas de Mantenimiento
+
+```bash
+# Respaldo de base de datos (semanal)
+firebase database:backup
+
+# Limpieza de logs antiguos (mensual)
+# Implementar rotación de logs
+
+# Actualización de dependencias (mensual)
+pnpm update
+
+# Revisión de seguridad (trimestral)
+pnpm audit
+```
+
+### 🔧 Troubleshooting
+
+#### Problemas Comunes y Soluciones
+
+**1. Error "Firebase Admin SDK not initialized"**
+```bash
+# Verificar archivo serviceAccountKey.json
+ls -la serviceAccountKey.json
+
+# Verificar permisos
+chmod 600 serviceAccountKey.json
+```
+
+**2. Error "JWT token expired"**
+```bash
+# Renovar token (Login nuevamente)
+curl -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com", "password": "password"}'
+```
+
+**3. Error "Stock insuficiente"**
+```bash
+# Verificar stock actual
+curl -X GET http://localhost:3000/inventory/PRODUCT_ID \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# Actualizar stock si necesario
+curl -X PUT http://localhost:3000/inventory/PRODUCT_ID \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{"stock": 50}'
+```
+
+**4. Error de conexión a Firebase**
+```bash
+# Verificar conectividad
+ping firebase.googleapis.com
+
+# Verificar configuración
+node -e "console.log(require('./firebaseConfig.js'))"
+```
+
+### 📚 Recursos Adicionales
+
+#### Documentación Técnica
+
+- [Firebase Admin SDK Documentation](https://firebase.google.com/docs/admin/setup)
+- [Express.js Best Practices](https://expressjs.com/en/advanced/best-practice-security.html)
+- [Jest Testing Framework](https://jestjs.io/docs/getting-started)
+
+#### Postman Collection
+
+Para importar todos los endpoints en Postman:
+
+1. Descarga la colección: `CEMAC-API.postman_collection.json`
+2. Importa en Postman: `File > Import`
+3. Configura variables de entorno:
+   - `baseUrl`: `http://localhost:3000`
+   - `token`: Tu JWT token obtenido del login
+
+#### Herramientas Recomendadas
+
+- **Postman**: Testing de API
+- **MongoDB Compass**: Visualización de datos (si usas MongoDB)
+- **Firebase Console**: Gestión de base de datos
+- **VS Code**: IDE recomendado con extensiones Node.js
 
 ## 📄 Licencia
 

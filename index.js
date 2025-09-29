@@ -8,6 +8,7 @@ const { admin, db } = require('./firebaseConfig');
 // Importar rutas
 const authRoutes = require('./backend/routes/authRoutes');
 const inventoryRoutes = require('./backend/routes/inventoryRoutes');
+const salesRoutes = require('./backend/routes/salesRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -33,6 +34,7 @@ app.use((req, res, next) => {
 // Rutas
 app.use('/auth', authRoutes);
 app.use('/inventory', inventoryRoutes);
+app.use('/sales', salesRoutes);
 
 // Ruta de prueba
 app.get('/', (req, res) => {
