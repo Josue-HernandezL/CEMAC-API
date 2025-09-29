@@ -126,6 +126,7 @@ pnpm start
 - `GET /auth/users` - Listar todos los usuarios
 - `PUT /auth/users/{userId}/status` - Activar/desactivar usuario
 - `PUT /auth/users/{userId}/role` - Cambiar rol de usuario
+- `PUT /auth/users/{userId}/profile` - Actualizar perfil de usuario
 
 ### 📦 Inventario
 
@@ -370,6 +371,43 @@ curl -X PUT http://localhost:3000/auth/users/{userId}/role \
 
 **Campos requeridos:**
 - `role` - Nuevo rol del usuario ("admin" o "user")
+
+#### 📝 Actualizar Perfil de Usuario (PUT /auth/users/{userId}/profile)
+
+**Descripción:** Permite a un administrador actualizar los datos del perfil de cualquier usuario (solo firstName y lastName).
+
+```bash
+curl -X PUT http://localhost:3000/auth/users/{userId}/profile \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "firstName": "Nuevo Nombre",
+    "lastName": "Nuevo Apellido"
+  }'
+```
+
+**Respuesta exitosa (200):**
+```json
+{
+  "message": "Perfil del usuario actualizado exitosamente",
+  "userId": "ABC123XYZ789",
+  "updatedFields": {
+    "firstName": "Nuevo Nombre",
+    "lastName": "Nuevo Apellido"
+  }
+}
+```
+
+**Validaciones de seguridad:**
+- ✅ Solo administradores pueden usar este endpoint
+- ✅ El admin no puede modificar su propio perfil
+- ✅ Validación de campos permitidos (firstName, lastName)
+- ✅ El usuario objetivo debe existir
+- ✅ Se actualiza tanto la DB como Firebase Auth displayName
+
+**Campos permitidos:**
+- `firstName` - Nuevo nombre del usuario
+- `lastName` - Nuevo apellido del usuario
 
 ### Obtener Perfil (GET /auth/profile)
 
