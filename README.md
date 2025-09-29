@@ -124,6 +124,7 @@ pnpm start
 #### Solo Administradores
 - `POST /auth/register` - Registrar nuevo usuario
 - `GET /auth/users` - Listar todos los usuarios
+- `PUT /auth/users/{userId}/status` - Activar/desactivar usuario
 
 ### 📦 Inventario
 
@@ -257,6 +258,61 @@ curl -X GET http://localhost:3000/auth/users \
 - `createdAt` - Fecha de creación de la cuenta
 - `lastLogin` - Fecha del último inicio de sesión
 - `emailVerified` - Estado de verificación del email
+
+### Activar/Desactivar Usuario (PUT /auth/users/{userId}/status)
+
+**⚠️ Solo administradores**
+
+```bash
+# Desactivar usuario
+curl -X PUT http://localhost:3000/auth/users/{userId}/status \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "isActive": false
+  }'
+
+# Activar usuario
+curl -X PUT http://localhost:3000/auth/users/{userId}/status \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "isActive": true
+  }'
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "message": "Usuario desactivado exitosamente",
+  "user": {
+    "uid": "user123abc",
+    "email": "usuario@cemac.com",
+    "firstName": "Juan",
+    "lastName": "Pérez",
+    "role": "user",
+    "isActive": false
+  }
+}
+```
+
+**Descripción:**
+- Solo usuarios con `role: 'admin'` pueden cambiar el estado de otros usuarios
+- Actualiza el campo `isActive` en la base de datos y Firebase Auth
+- Un administrador **NO puede desactivarse a sí mismo** (protección)
+- Usuarios inactivos no pueden hacer login
+- Se registra información de auditoría (quién y cuándo cambió el estado)
+
+**Validaciones:**
+- ✅ Solo administradores pueden acceder
+- ✅ El `userId` debe existir en la base de datos
+- ✅ El campo `isActive` debe ser un booleano
+- ✅ Un admin no puede desactivarse a sí mismo
+- ✅ Se actualiza tanto la DB como Firebase Auth
+
+**Campos requeridos:**
+- `isActive` - Estado del usuario (true = activo, false = inactivo)
 
 ### Obtener Perfil (GET /auth/profile)
 
