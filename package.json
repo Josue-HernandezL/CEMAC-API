@@ -1,19 +1,20 @@
 {
   "name": "cemac-api",
   "version": "1.0.0",
-  "description": "API de autenticación para CEMAC con Firebase",
+  "description": "API REST para CEMAC con autenticación Firebase y gestión de inventario",
   "main": "index.js",
+  "engines": {
+    "node": "22.x",
+    "pnpm": ">=8.0.0"
+  },
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "setup": "node backend/scripts/setupDatabase.js",
-    "setup:inventory": "node backend/scripts/setupInventory.js",
-    "build": "echo 'No build step required'",
     "test": "jest",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage",
+    "test:auth": "jest test/auth.test.js",
     "test:inventory": "jest test/inventory.test.js",
-    "test:auth": "jest test/auth.test.js"
+    "test:watch": "jest --watch",
+    "setup": "node backend/scripts/setupDatabase.js"
   },
   "keywords": [
     "api",
@@ -35,13 +36,7 @@
     "firebase-admin": "^13.5.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
+    "node-fetch": "^2.7.0",
     "nodemon": "^3.1.10"
-  },
-  "engines": {
-    "node": ">=18.x"
-  },
-  "devDependencies": {
-    "jest": "^30.1.3",
-    "supertest": "^7.1.4"
   }
 }
