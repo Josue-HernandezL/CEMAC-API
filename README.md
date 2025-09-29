@@ -1243,6 +1243,214 @@ curl -X GET "http://localhost:3000/sales/reports/summary?vendedor=María García
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
+## 📊 Módulo de Análisis de Ventas
+
+El módulo de análisis proporciona estadísticas avanzadas y reportes de ventas para la toma de decisiones empresariales.
+
+### 🎯 Endpoints de Análisis
+
+#### Obtener Estadísticas Completas (GET /analysis/sales)
+
+Devuelve estadísticas diarias de la última semana, mensuales del último semestre y productos más vendidos.
+
+```bash
+curl -X GET http://localhost:3000/analysis/sales \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "data": {
+    "daily": {
+      "labels": ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"],
+      "values": [1500, 2300, 1800, 2100, 2800, 3200, 2600]
+    },
+    "monthly": {
+      "labels": ["Abr", "May", "Jun", "Jul", "Ago", "Sep"],
+      "values": [45000, 52000, 48000, 51000, 54000, 58000]
+    },
+    "topProducts": [
+      {
+        "id": "prod123",
+        "name": "Libretas de cuadros",
+        "sales": 150,
+        "revenue": 4500
+      },
+      {
+        "id": "prod456",
+        "name": "Bolígrafos azules",
+        "sales": 120,
+        "revenue": 2400
+      }
+    ]
+  },
+  "message": "Estadísticas obtenidas exitosamente"
+}
+```
+
+#### Estadísticas por Período Personalizado (GET /analysis/sales/custom)
+
+Obtiene estadísticas para un rango de fechas específico con agrupación configurable.
+
+```bash
+# Estadísticas diarias
+curl -X GET "http://localhost:3000/analysis/sales/custom?startDate=2025-09-01&endDate=2025-09-30&groupBy=day" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# Estadísticas semanales
+curl -X GET "http://localhost:3000/analysis/sales/custom?startDate=2025-09-01&endDate=2025-09-30&groupBy=week" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# Estadísticas mensuales
+curl -X GET "http://localhost:3000/analysis/sales/custom?startDate=2025-01-01&endDate=2025-12-31&groupBy=month" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Parámetros obligatorios:**
+- `startDate` - Fecha de inicio (formato: YYYY-MM-DD)
+- `endDate` - Fecha de fin (formato: YYYY-MM-DD)
+
+**Parámetros opcionales:**
+- `groupBy` - Agrupación de datos: `day` (default), `week`, `month`
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "data": {
+    "labels": ["2025-09-01", "2025-09-02", "2025-09-03"],
+    "values": [1200.50, 1800.75, 950.25],
+    "totalSales": 15,
+    "totalRevenue": 3951.50,
+    "averageOrderValue": 263.43
+  },
+  "message": "Estadísticas del período 2025-09-01 al 2025-09-30 obtenidas exitosamente"
+}
+```
+
+#### Resumen Ejecutivo (GET /analysis/sales/summary)
+
+Proporciona un resumen ejecutivo con comparación mes actual vs mes anterior.
+
+```bash
+curl -X GET http://localhost:3000/analysis/sales/summary \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "data": {
+    "currentMonth": {
+      "sales": 45,
+      "revenue": 12500.75,
+      "averageOrderValue": 277.79
+    },
+    "lastMonth": {
+      "sales": 38,
+      "revenue": 10200.50,
+      "averageOrderValue": 268.43
+    },
+    "growth": {
+      "revenue": 22.55,
+      "sales": 18.42
+    }
+  },
+  "message": "Resumen ejecutivo obtenido exitosamente"
+}
+```
+
+### 🔍 Características del Análisis
+
+**Datos Diarios:**
+- Últimos 7 días (incluyendo día actual)
+- Valores de ingresos por día de la semana
+- Etiquetas en español: Dom, Lun, Mar, Mie, Jue, Vie, Sab
+
+**Datos Mensuales:**
+- Últimos 6 meses (incluyendo mes actual)
+- Ingresos totales por mes
+- Etiquetas de meses abreviadas: Ene, Feb, Mar, etc.
+
+**Productos Más Vendidos:**
+- Top 10 productos por cantidad vendida
+- Incluye ID, nombre, cantidad de ventas e ingresos
+- Actualizado con información del inventario en tiempo real
+
+**Período Personalizado:**
+- Filtrado por rango de fechas específico
+- Agrupación configurable (día, semana, mes)
+- Métricas agregadas: total de ventas, ingresos y promedio por orden
+
+**Resumen Ejecutivo:**
+- Comparación mes actual vs mes anterior
+- Cálculo automático de porcentajes de crecimiento
+- Métricas clave para toma de decisiones
+
+### ⚠️ Validaciones de Análisis
+
+**Errores Comunes:**
+
+1. **Sin autorización:**
+```json
+{
+  "error": "Token de acceso requerido"
+}
+```
+
+2. **Token inválido:**
+```json
+{
+  "error": "Token no válido"
+}
+```
+
+3. **Fechas inválidas (período personalizado):**
+```json
+{
+  "success": false,
+  "message": "La fecha de inicio debe ser anterior a la fecha de fin"
+}
+```
+
+4. **Fechas faltantes:**
+```json
+{
+  "success": false,
+  "message": "Se requieren las fechas de inicio y fin (startDate, endDate)"
+}
+```
+
+### 📈 Casos de Uso del Análisis
+
+**1. Dashboard Ejecutivo**
+```bash
+# Obtener métricas generales
+curl -X GET http://localhost:3000/analysis/sales \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# Resumen del mes
+curl -X GET http://localhost:3000/analysis/sales/summary \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**2. Análisis de Tendencias**
+```bash
+# Tendencia trimestral
+curl -X GET "http://localhost:3000/analysis/sales/custom?startDate=2025-07-01&endDate=2025-09-30&groupBy=month" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**3. Reporte de Productos**
+```bash
+# Ver productos más vendidos
+curl -X GET http://localhost:3000/analysis/sales \
+  -H "Authorization: Bearer YOUR_TOKEN" | jq '.data.topProducts'
+```
+
 ## 🧪 Testing en servidor de prueba
 
 ```bash
