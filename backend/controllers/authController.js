@@ -369,6 +369,109 @@ const getAllUsers = async (req, res) => {
   }
 };
 
+// UPDATE USER STATUS - Solo administradores pueden activar/desactivar usuarios
+const updateUserStatus = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { isActive } = req.body;
+    const adminUid = req.user.uid;
+
+    // Validaciones básicas
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID de usuario requerido'
+      });
+    }
+
+    if (typeof isActive !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        message: 'El campo isActive debe ser un valor booleano (true/false)'
+      });
+    }
+
+    // Verificar que el admin no se esté desactivando a sí mismo
+    if (userId === adminUid && !isActive) {
+      return res.status(403).json({
+        success: false,
+        message: 'No puedes desactivar tu propia cuenta'
+      });
+    }
+
+    // Verificar que el usuario a modificar existe
+    const targetUserRef = db.ref(`users/${userId}`);
+    const targetUserSnapshot = await targetUserRef.once('value');
+    
+    if (!targetUserSnapshot.exists()) {
+      return res.status(404).json({
+        success: false,
+        message: 'Usuario no encontrado'
+      });
+    }
+
+    const targetUserData = targetUserSnapshot.val();
+
+    // Actualizar el estado del usuario
+    const updateData = {
+      isActive: isActive,
+      updatedAt: new Date().toISOString(),
+      updatedBy: adminUid
+    };
+
+    // Si se está desactivando, agregar información de desactivación
+    if (!isActive) {
+      updateData.deactivatedAt = new Date().toISOString();
+      updateData.deactivatedBy = adminUid;
+    } else {
+      // Si se está reactivando, limpiar información de desactivación
+      updateData.deactivatedAt = null;
+      updateData.deactivatedBy = null;
+      updateData.reactivatedAt = new Date().toISOString();
+      updateData.reactivatedBy = adminUid;
+    }
+
+    await targetUserRef.update(updateData);
+
+    // También actualizar en Firebase Auth si es necesario (deshabilitar/habilitar usuario)
+    try {
+      await auth.updateUser(userId, {
+        disabled: !isActive
+      });
+    } catch (authError) {
+      console.warn(`No se pudo actualizar el estado en Firebase Auth para usuario ${userId}:`, authError.message);
+      // Continuamos aunque falle Firebase Auth, ya que el estado en la DB ya se actualizó
+    }
+
+    // Preparar respuesta
+    const updatedUser = {
+      uid: userId,
+      email: targetUserData.email,
+      firstName: targetUserData.firstName || '',
+      lastName: targetUserData.lastName || '',
+      role: targetUserData.role,
+      isActive: isActive
+    };
+
+    res.json({
+      success: true,
+      message: `Usuario ${isActive ? 'activado' : 'desactivado'} exitosamente`,
+      user: updatedUser
+    });
+
+    // Log de la acción para auditoría
+    console.log(`Admin ${adminUid} ${isActive ? 'activó' : 'desactivó'} al usuario ${userId} (${targetUserData.email})`);
+
+  } catch (error) {
+    console.error('Error actualizando estado del usuario:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
 module.exports = {
   login,
   register,
@@ -376,5 +479,6 @@ module.exports = {
   getProfile,
   updateProfile,
   getAllUsers,
+  updateUserStatus,
   createUserWithEmailAndPassword
 };
