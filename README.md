@@ -11,6 +11,14 @@ API REST con autenticación Firebase y sistema de gestión de inventario.
 - ✅ Recuperación de contraseña
 - ✅ Middleware de autorización por roles
 
+### Gestión Administrativa de Usuarios
+- ✅ **Listado completo de usuarios** - Visualización de todos los usuarios del sistema
+- ✅ **Activación/Desactivación** - Control de estado de cuentas de usuario
+- ✅ **Gestión de roles** - Cambio de permisos (admin/user) 
+- ✅ **Actualización de perfiles** - Modificación de datos personales por admin
+- ✅ **Middleware de seguridad especializado** - Protección avanzada de endpoints críticos
+- ✅ **Validaciones anti-auto-modificación** - Prevención de que admins se modifiquen a sí mismos
+
 ### Sistema de Inventario
 - ✅ CRUD completo de productos
 - ✅ Gestión de stock con historial de movimientos
@@ -659,6 +667,36 @@ pnpm test -- --watch
 - Verificación de usuarios activos
 - Soft delete para mantener integridad de datos
 
+### 🛡️ Middleware de Seguridad Administrativo
+
+El sistema implementa un middleware especializado `requireAdminAccess` para proteger todos los endpoints administrativos críticos:
+
+**Características:**
+- ✅ **Verificación directa de token**: Usa `auth.verifyIdToken(token)`
+- ✅ **Consulta directa a Firebase DB**: Acceso directo a `users/{uid}`
+- ✅ **Validación estricta de rol**: Solo usuarios con `role: "admin"`
+- ✅ **Soporte dual de tokens**: Compatible con ID tokens y custom tokens
+- ✅ **Mensajes específicos**: Error descriptivo para acceso denegado
+
+**Endpoints protegidos:**
+- `POST /auth/register` - Registro de nuevos usuarios
+- `GET /auth/users` - Listado de todos los usuarios
+- `PUT /auth/users/{userId}/status` - Activar/desactivar usuarios
+- `PUT /auth/users/{userId}/role` - Cambiar rol de usuarios
+- `PUT /auth/users/{userId}/profile` - Actualizar perfil de usuarios
+
+**Respuestas de seguridad:**
+```json
+// Sin token
+{ "error": "Token de acceso requerido" }
+
+// Token inválido
+{ "error": "Token no válido" }
+
+// No es administrador
+{ "error": "Acceso denegado. Se requieren permisos de administrador" }
+```
+
 ## � Scripts Disponibles
 
 - `pnpm start` - Iniciar en producción
@@ -676,7 +714,7 @@ CEMAC-API/
 │   │   ├── authController.js      # Lógica de autenticación
 │   │   └── inventoryController.js # Lógica de inventario
 │   ├── middleware/
-│   │   └── auth.js                # Middleware de autenticación
+│   │   └── auth.js                # Middleware de autenticación + requireAdminAccess
 │   ├── routes/
 │   │   ├── authRoutes.js          # Rutas de autenticación
 │   │   └── inventoryRoutes.js     # Rutas de inventario
@@ -692,7 +730,33 @@ CEMAC-API/
 └── serviceAccountKey.json         # Credenciales Firebase
 ```
 
+## 📋 Changelog
 
+### ✨ v2.1.0 - Middleware de Seguridad Administrativo (Septiembre 2025)
+
+**🛡️ Nueva Funcionalidad: Middleware `requireAdminAccess`**
+- Implementado middleware especializado para endpoints administrativos críticos
+- Verificación directa de tokens con `auth.verifyIdToken()`
+- Consulta directa a Firebase Database para validación de roles
+- Soporte dual para ID tokens y custom tokens
+- Mensajes de error específicos y descriptivos
+
+**📋 Nuevos Endpoints Administrativos:**
+- `GET /auth/users` - Listado completo de usuarios del sistema
+- `PUT /auth/users/{userId}/status` - Activación/desactivación de cuentas
+- `PUT /auth/users/{userId}/role` - Gestión de roles y permisos
+- `PUT /auth/users/{userId}/profile` - Actualización de perfiles por admin
+
+**🔒 Mejoras de Seguridad:**
+- Protección avanzada en todos los endpoints administrativos
+- Validaciones anti-auto-modificación para administradores
+- Manejo robusto de errores y tokens expirados
+- Compatibilidad completa con el sistema de autenticación existente
+
+**📚 Documentación:**
+- Documentación técnica completa en `SECURITY-MIDDLEWARE.md`
+- Ejemplos de uso y respuestas de API actualizados
+- Guías de implementación y mejores prácticas
 
 ## 📄 Licencia
 

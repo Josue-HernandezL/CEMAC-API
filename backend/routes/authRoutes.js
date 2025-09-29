@@ -12,7 +12,8 @@ const {
 } = require('../controllers/authController');
 const { 
   authenticateUser, 
-  authenticateAdmin 
+  authenticateAdmin,
+  requireAdminAccess 
 } = require('../middleware/auth');
 
 const router = express.Router();
@@ -26,11 +27,11 @@ router.get('/profile', authenticateUser, getProfile);
 router.put('/profile', authenticateUser, updateProfile);
 
 // Rutas de administrador (requieren autenticación + permisos de admin)
-router.post('/register', authenticateAdmin, register);
-router.get('/users', authenticateAdmin, getAllUsers);
-router.put('/users/:userId/status', authenticateAdmin, updateUserStatus);
-router.put('/users/:userId/role', authenticateAdmin, updateUserRole);
-router.put('/users/:userId/profile', authenticateAdmin, updateUserProfileByAdmin);
+router.post('/register', requireAdminAccess, register);
+router.get('/users', requireAdminAccess, getAllUsers);
+router.put('/users/:userId/status', requireAdminAccess, updateUserStatus);
+router.put('/users/:userId/role', requireAdminAccess, updateUserRole);
+router.put('/users/:userId/profile', requireAdminAccess, updateUserProfileByAdmin);
 
 // Ruta de prueba para verificar token
 router.get('/verify', authenticateUser, (req, res) => {
@@ -46,7 +47,7 @@ router.get('/verify', authenticateUser, (req, res) => {
 });
 
 // Ruta de prueba para verificar permisos de admin
-router.get('/admin-check', authenticateAdmin, (req, res) => {
+router.get('/admin-check', requireAdminAccess, (req, res) => {
   res.json({
     message: 'Acceso de administrador confirmado',
     admin: {
