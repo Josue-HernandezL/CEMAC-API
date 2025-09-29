@@ -584,6 +584,94 @@ const updateUserRole = async (req, res) => {
   }
 };
 
+// UPDATE USER PROFILE BY ADMIN - Solo administradores pueden actualizar perfiles de otros usuarios
+const updateUserProfileByAdmin = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { firstName, lastName } = req.body;
+    const adminUid = req.user.uid;
+
+    // Validaciones básicas
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID de usuario requerido'
+      });
+    }
+
+    // Verificar que al menos un campo esté presente para actualizar
+    if (!firstName && !lastName) {
+      return res.status(400).json({
+        success: false,
+        message: 'Debe proporcionar al menos firstName o lastName para actualizar'
+      });
+    }
+
+    // Verificar que el usuario a modificar existe
+    const targetUserRef = db.ref(`users/${userId}`);
+    const targetUserSnapshot = await targetUserRef.once('value');
+    
+    if (!targetUserSnapshot.exists()) {
+      return res.status(404).json({
+        success: false,
+        message: 'Usuario no encontrado'
+      });
+    }
+
+    const targetUserData = targetUserSnapshot.val();
+
+    // Preparar datos de actualización
+    const updateData = {
+      updatedAt: new Date().toISOString(),
+      updatedBy: adminUid
+    };
+
+    // Solo actualizar los campos que se proporcionaron
+    if (firstName !== undefined) {
+      updateData.firstName = firstName.trim();
+    }
+    if (lastName !== undefined) {
+      updateData.lastName = lastName.trim();
+    }
+
+    // Actualizar el perfil del usuario
+    await targetUserRef.update(updateData);
+
+    // Obtener los datos actualizados para la respuesta
+    const updatedUserSnapshot = await targetUserRef.once('value');
+    const updatedUserData = updatedUserSnapshot.val();
+
+    // Preparar respuesta
+    const responseUser = {
+      uid: userId,
+      firstName: updatedUserData.firstName || '',
+      lastName: updatedUserData.lastName || '',
+      updatedAt: updatedUserData.updatedAt
+    };
+
+    res.json({
+      success: true,
+      message: 'Perfil actualizado exitosamente',
+      user: responseUser
+    });
+
+    // Log de la acción para auditoría
+    const changedFields = [];
+    if (firstName !== undefined) changedFields.push(`firstName: "${firstName}"`);
+    if (lastName !== undefined) changedFields.push(`lastName: "${lastName}"`);
+    
+    console.log(`Admin ${adminUid} actualizó el perfil del usuario ${userId} (${targetUserData.email}): ${changedFields.join(', ')}`);
+
+  } catch (error) {
+    console.error('Error actualizando perfil del usuario:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
 module.exports = {
   login,
   register,
@@ -593,5 +681,6 @@ module.exports = {
   getAllUsers,
   updateUserStatus,
   updateUserRole,
+  updateUserProfileByAdmin,
   createUserWithEmailAndPassword
 };

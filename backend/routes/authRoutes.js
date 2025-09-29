@@ -7,7 +7,8 @@ const {
   updateProfile,
   getAllUsers,
   updateUserStatus,
-  updateUserRole
+  updateUserRole,
+  updateUserProfileByAdmin
 } = require('../controllers/authController');
 const { 
   authenticateUser, 
@@ -29,6 +30,7 @@ router.post('/register', authenticateAdmin, register);
 router.get('/users', authenticateAdmin, getAllUsers);
 router.put('/users/:userId/status', authenticateAdmin, updateUserStatus);
 router.put('/users/:userId/role', authenticateAdmin, updateUserRole);
+router.put('/users/:userId/profile', authenticateAdmin, updateUserProfileByAdmin);
 
 // Ruta de prueba para verificar token
 router.get('/verify', authenticateUser, (req, res) => {
