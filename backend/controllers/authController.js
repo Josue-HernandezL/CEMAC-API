@@ -472,6 +472,118 @@ const updateUserStatus = async (req, res) => {
   }
 };
 
+// UPDATE USER ROLE - Solo administradores pueden cambiar roles de usuarios
+const updateUserRole = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { role } = req.body;
+    const adminUid = req.user.uid;
+
+    // Validaciones básicas
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID de usuario requerido'
+      });
+    }
+
+    if (!role) {
+      return res.status(400).json({
+        success: false,
+        message: 'Campo role es requerido'
+      });
+    }
+
+    // Validar que el rol sea válido
+    const validRoles = ['admin', 'user'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rol inválido. Los roles permitidos son: admin, user'
+      });
+    }
+
+    // Verificar que el usuario a modificar existe
+    const targetUserRef = db.ref(`users/${userId}`);
+    const targetUserSnapshot = await targetUserRef.once('value');
+    
+    if (!targetUserSnapshot.exists()) {
+      return res.status(404).json({
+        success: false,
+        message: 'Usuario no encontrado'
+      });
+    }
+
+    const targetUserData = targetUserSnapshot.val();
+
+    // Verificar que el admin no se esté quitando sus propios privilegios
+    if (userId === adminUid && role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'No puedes quitarte tus propios privilegios de administrador'
+      });
+    }
+
+    // Verificar si el rol ya es el mismo
+    if (targetUserData.role === role) {
+      return res.status(400).json({
+        success: false,
+        message: `El usuario ya tiene el rol "${role}"`
+      });
+    }
+
+    // Actualizar el rol del usuario
+    const updateData = {
+      role: role,
+      updatedAt: new Date().toISOString(),
+      updatedBy: adminUid,
+      roleChangedAt: new Date().toISOString(),
+      roleChangedBy: adminUid,
+      previousRole: targetUserData.role
+    };
+
+    await targetUserRef.update(updateData);
+
+    // También actualizar custom claims en Firebase Auth para consistencia
+    try {
+      await auth.setCustomUserClaims(userId, {
+        role: role,
+        email: targetUserData.email
+      });
+    } catch (authError) {
+      console.warn(`No se pudieron actualizar los custom claims para usuario ${userId}:`, authError.message);
+      // Continuamos aunque falle, ya que el rol en la DB ya se actualizó
+    }
+
+    // Preparar respuesta
+    const updatedUser = {
+      uid: userId,
+      email: targetUserData.email,
+      firstName: targetUserData.firstName || '',
+      lastName: targetUserData.lastName || '',
+      role: role,
+      isActive: targetUserData.isActive !== false
+    };
+
+    res.json({
+      success: true,
+      message: 'Rol actualizado exitosamente',
+      user: updatedUser
+    });
+
+    // Log de la acción para auditoría
+    console.log(`Admin ${adminUid} cambió el rol del usuario ${userId} (${targetUserData.email}) de "${targetUserData.role}" a "${role}"`);
+
+  } catch (error) {
+    console.error('Error actualizando rol del usuario:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
 module.exports = {
   login,
   register,
@@ -480,5 +592,6 @@ module.exports = {
   updateProfile,
   getAllUsers,
   updateUserStatus,
+  updateUserRole,
   createUserWithEmailAndPassword
 };

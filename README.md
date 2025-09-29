@@ -125,6 +125,7 @@ pnpm start
 - `POST /auth/register` - Registrar nuevo usuario
 - `GET /auth/users` - Listar todos los usuarios
 - `PUT /auth/users/{userId}/status` - Activar/desactivar usuario
+- `PUT /auth/users/{userId}/role` - Cambiar rol de usuario
 
 ### 📦 Inventario
 
@@ -313,6 +314,62 @@ curl -X PUT http://localhost:3000/auth/users/{userId}/status \
 
 **Campos requeridos:**
 - `isActive` - Estado del usuario (true = activo, false = inactivo)
+
+### Cambiar Rol de Usuario (PUT /auth/users/{userId}/role)
+
+**⚠️ Solo administradores**
+
+```bash
+# Cambiar rol a administrador
+curl -X PUT http://localhost:3000/auth/users/{userId}/role \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "role": "admin"
+  }'
+
+# Cambiar rol a usuario normal
+curl -X PUT http://localhost:3000/auth/users/{userId}/role \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "role": "user"
+  }'
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "message": "Rol actualizado exitosamente",
+  "user": {
+    "uid": "user123abc",
+    "email": "usuario@cemac.com",
+    "firstName": "Juan",
+    "lastName": "Pérez",
+    "role": "admin",
+    "isActive": true
+  }
+}
+```
+
+**Descripción:**
+- Solo usuarios con `role: 'admin'` pueden cambiar roles de otros usuarios
+- Actualiza el campo `role` en la base de datos y Firebase Auth custom claims
+- Un administrador **NO puede quitarse sus propios privilegios** (protección)
+- Se registra información de auditoría completa (quién, cuándo, rol anterior)
+- Los roles válidos son: `admin` y `user`
+
+**Validaciones:**
+- ✅ Solo administradores pueden acceder
+- ✅ El `userId` debe existir en la base de datos
+- ✅ El `role` debe ser "admin" o "user"
+- ✅ Un admin no puede quitarse sus propios privilegios
+- ✅ No se puede cambiar al mismo rol que ya tiene
+- ✅ Se actualiza tanto la DB como Firebase Auth custom claims
+
+**Campos requeridos:**
+- `role` - Nuevo rol del usuario ("admin" o "user")
 
 ### Obtener Perfil (GET /auth/profile)
 
