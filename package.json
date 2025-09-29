@@ -4,7 +4,7 @@
   "description": "API REST para CEMAC con autenticación Firebase y gestión de inventario",
   "main": "index.js",
   "engines": {
-    "node": "22.x",
+    "node": "20.x",
     "pnpm": ">=8.0.0"
   },
   "scripts": {
