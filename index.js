@@ -9,6 +9,7 @@ const { admin, db } = require('./firebaseConfig');
 const authRoutes = require('./backend/routes/authRoutes');
 const inventoryRoutes = require('./backend/routes/inventoryRoutes');
 const salesRoutes = require('./backend/routes/salesRoutes');
+const analysisRoutes = require('./backend/routes/analysisRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -35,6 +36,7 @@ app.use((req, res, next) => {
 app.use('/auth', authRoutes);
 app.use('/inventory', inventoryRoutes);
 app.use('/sales', salesRoutes);
+app.use('/analysis', analysisRoutes);
 
 // Ruta de prueba
 app.get('/', (req, res) => {
