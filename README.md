@@ -81,6 +81,11 @@ LOG_LEVEL=info
 CLOUDINARY_CLOUD_NAME=tu-cloud-name
 CLOUDINARY_API_KEY=tu-api-key
 CLOUDINARY_API_SECRET=tu-api-secret
+
+# Configuración de Email (para recuperación de contraseñas)
+EMAIL_USER=tu-email@gmail.com
+EMAIL_APP_PASSWORD=tu-app-password-de-gmail
+FRONTEND_URL=http://localhost:3000
 ```
 
 ### 3. Configurar Firebase
@@ -99,7 +104,35 @@ CLOUDINARY_API_SECRET=tu-api-secret
 2. Crea una cuenta o inicia sesión
 3. Copia Cloud Name, API Key y API Secret a tu archivo `.env`
 
-### 5. Ejecutar configuración inicial
+### 5. Configurar Email (Gmail)
+
+**Pasos para obtener App Password de Gmail:**
+
+1. **Activar verificación en 2 pasos:**
+   - Ve a [Gestionar tu cuenta de Google](https://myaccount.google.com/)
+   - Seguridad > Verificación en 2 pasos
+   - Actívala si no está activada
+
+2. **Generar App Password:**
+   - Ve a Seguridad > Contraseñas de aplicaciones
+   - Selecciona "Correo" como aplicación
+   - Copia la contraseña generada (16 caracteres)
+
+3. **Configurar variables:**
+   ```env
+   EMAIL_USER=tu-email@gmail.com
+   EMAIL_APP_PASSWORD=abcd-efgh-ijkl-mnop  # La contraseña generada
+   FRONTEND_URL=http://localhost:3000      # URL de tu frontend
+   ```
+
+**✅ Características del servicio de email:**
+- Email HTML profesional con plantilla personalizada
+- Enlace de recuperación seguro que expira automáticamente
+- Auditoría completa de solicitudes de recuperación
+- Manejo robusto de errores de email
+- Validación de cuentas activas
+
+### 6. Ejecutar configuración inicial
 
 ```bash
 # Crear estructura de BD y usuario administrador
@@ -426,6 +459,8 @@ curl -X GET http://localhost:3000/auth/profile \
 
 ### Recuperar Contraseña (POST /auth/recover)
 
+**🔥 NUEVO: Ahora envía emails reales con plantilla HTML profesional**
+
 ```bash
 curl -X POST http://localhost:3000/auth/recover \
   -H "Content-Type: application/json" \
@@ -433,6 +468,33 @@ curl -X POST http://localhost:3000/auth/recover \
     "email": "usuario@cemac.com"
   }'
 ```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "message": "Se ha enviado un enlace de recuperación a tu email. Revisa tu bandeja de entrada y la carpeta de spam.",
+  "sentTo": "usuario@cemac.com",
+  "expiresIn": "1 hora"
+}
+```
+
+**Características del servicio de email:**
+- ✅ **Email HTML profesional** con plantilla personalizada de CEMAC
+- ✅ **Enlace seguro** que expira en 1 hora automáticamente
+- ✅ **Auditoría completa** - registra IP, User-Agent y timestamp
+- ✅ **Manejo de errores robusto** con categorización de fallos
+- ✅ **Validación de seguridad** - verifica cuentas activas
+- ✅ **Protección anti-spam** - no revela si el email existe
+
+**Variables de entorno requeridas:**
+```bash
+EMAIL_USER=tu-email@gmail.com
+EMAIL_APP_PASSWORD=tu-app-password-de-gmail
+FRONTEND_URL=http://localhost:3000
+```
+
+> **Nota:** Requiere configurar App Password de Gmail. Ver sección de configuración.
 
 ### 📦 Ejemplos de Inventario
 
