@@ -1,5 +1,6 @@
 const { auth, db } = require('../../firebaseConfig');
 const bcrypt = require('bcryptjs');
+const { sendPasswordResetEmail, validateEmailConfig } = require('../config/emailService');
 
 // Función para crear un usuario en Firebase Auth y Realtime Database
 const createUserWithEmailAndPassword = async (email, password, userData) => {
@@ -173,53 +174,154 @@ const recover = async (req, res) => {
   try {
     const { email } = req.body;
 
+    // Validaciones básicas
     if (!email) {
-      return res.status(400).json({ error: 'Email es requerido' });
+      return res.status(400).json({ 
+        success: false,
+        error: 'Email es requerido' 
+      });
     }
 
+    // Validar formato de email básico
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Formato de email inválido' 
+      });
+    }
+
+    // Verificar configuración de email
+    if (!validateEmailConfig()) {
+      console.error('❌ Configuración de email no válida');
+      return res.status(500).json({ 
+        success: false,
+        error: 'Servicio de email no disponible temporalmente. Contacte al administrador.' 
+      });
+    }
+
+    console.log(`📧 Procesando solicitud de recuperación para: ${email}`);
+
     // Verificar que el usuario existe
+    let userRecord;
+    let userData;
+    
     try {
-      const userRecord = await auth.getUserByEmail(email);
+      userRecord = await auth.getUserByEmail(email);
       
-      // Verificar que el usuario esté activo
+      // Verificar que el usuario esté activo en la base de datos
       const userRef = db.ref(`users/${userRecord.uid}`);
       const userSnapshot = await userRef.once('value');
-      const userData = userSnapshot.val();
+      userData = userSnapshot.val();
 
-      if (!userData || userData.isActive === false) {
-        return res.status(403).json({ error: 'Cuenta desactivada o no encontrada' });
+      if (!userData) {
+        console.warn(`⚠️ Usuario existe en Auth pero no en Database: ${email}`);
+        return res.status(404).json({ 
+          success: false,
+          error: 'Usuario no encontrado en el sistema' 
+        });
       }
 
-      // Generar link de recuperación
-      const resetLink = await auth.generatePasswordResetLink(email);
-
-      // Registrar solicitud de recuperación
-      const recoveryRef = db.ref(`recoveryRequests/${userRecord.uid}`);
-      await recoveryRef.set({
-        email: email,
-        requestedAt: new Date().toISOString(),
-        resetLink: resetLink,
-        used: false
-      });
-
-      res.json({
-        message: 'Se ha enviado un enlace de recuperación a tu email',
-        resetLink: resetLink // En producción, esto se enviaría por email
-      });
+      if (userData.isActive === false) {
+        console.warn(`⚠️ Intento de recuperación en cuenta desactivada: ${email}`);
+        return res.status(403).json({ 
+          success: false,
+          error: 'Cuenta desactivada. Contacte al administrador para reactivar su cuenta.' 
+        });
+      }
 
     } catch (error) {
       if (error.code === 'auth/user-not-found') {
+        console.warn(`⚠️ Intento de recuperación con email no registrado: ${email}`);
         // Por seguridad, no revelamos si el email existe o no
-        return res.json({
-          message: 'Si el email existe en nuestro sistema, se ha enviado un enlace de recuperación'
+        return res.status(200).json({
+          success: true,
+          message: 'Si el email está registrado en nuestro sistema, recibirás un enlace de recuperación en tu bandeja de entrada.'
         });
       }
       throw error;
     }
 
+    try {
+      // Generar link de recuperación de Firebase
+      const resetLink = await auth.generatePasswordResetLink(email, {
+        url: process.env.FRONTEND_URL || 'http://localhost:3000',
+        handleCodeInApp: false
+      });
+
+      console.log(`🔗 Link de recuperación generado para: ${email}`);
+
+      // Registrar solicitud de recuperación en la base de datos
+      const recoveryRef = db.ref(`recoveryRequests/${userRecord.uid}`);
+      const recoveryData = {
+        email: email,
+        requestedAt: new Date().toISOString(),
+        ipAddress: req.ip || 'unknown',
+        userAgent: req.get('User-Agent') || 'unknown',
+        used: false,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString() // 1 hora
+      };
+
+      await recoveryRef.set(recoveryData);
+
+      // Enviar email de recuperación
+      console.log(`📤 Enviando email de recuperación a: ${email}`);
+      
+      const emailResult = await sendPasswordResetEmail(email, resetLink);
+      
+      if (emailResult.success) {
+        // Actualizar registro con información del envío
+        await recoveryRef.update({
+          emailSent: true,
+          emailSentAt: new Date().toISOString(),
+          messageId: emailResult.messageId
+        });
+
+        console.log(`✅ Email de recuperación enviado exitosamente a: ${email}`);
+        
+        res.json({
+          success: true,
+          message: 'Se ha enviado un enlace de recuperación a tu email. Revisa tu bandeja de entrada y la carpeta de spam.',
+          sentTo: email,
+          expiresIn: '1 hora'
+        });
+
+        // Log para auditoría
+        console.log(`📊 Recuperación procesada - Usuario: ${userRecord.uid}, Email: ${email}, IP: ${req.ip}`);
+
+      } else {
+        throw new Error('Error enviando email');
+      }
+
+    } catch (emailError) {
+      console.error(`❌ Error enviando email de recuperación a ${email}:`, emailError);
+      
+      // Registrar el fallo en la base de datos
+      if (userRecord) {
+        const recoveryRef = db.ref(`recoveryRequests/${userRecord.uid}`);
+        await recoveryRef.update({
+          emailSent: false,
+          emailError: emailError.message,
+          errorAt: new Date().toISOString()
+        });
+      }
+
+      // Respuesta genérica para no revelar problemas internos
+      return res.status(500).json({
+        success: false,
+        error: 'Error temporal enviando el email. Inténtalo de nuevo en unos minutos o contacta al administrador.',
+        code: 'EMAIL_SEND_FAILED'
+      });
+    }
+
   } catch (error) {
-    console.error('Error en recuperación:', error);
-    res.status(500).json({ error: 'Error interno del servidor' });
+    console.error('❌ Error general en recuperación de contraseña:', error);
+    
+    res.status(500).json({ 
+      success: false,
+      error: 'Error interno del servidor. Inténtalo de nuevo más tarde.',
+      code: 'INTERNAL_SERVER_ERROR'
+    });
   }
 };
 
