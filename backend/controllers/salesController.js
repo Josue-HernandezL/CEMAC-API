@@ -115,6 +115,7 @@ const createSale = async (req, res) => {
   try {
     const { 
       cliente, 
+      customerId,
       vendedor, 
       descuento = 0, 
       products,
@@ -148,6 +149,20 @@ const createSale = async (req, res) => {
       });
     }
 
+    // Si se proporciona customerId, validar que existe
+    let customerData = null;
+    if (customerId) {
+      const customerSnapshot = await db.ref(`customers/${customerId}`).once('value');
+      customerData = customerSnapshot.val();
+      
+      if (!customerData || !customerData.isActive) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cliente no encontrado o inactivo'
+        });
+      }
+    }
+
     // Validar productos y calcular totales
     const { validatedProducts, totalAmount } = await validateSaleProducts(products);
     
@@ -162,7 +177,8 @@ const createSale = async (req, res) => {
     const saleId = generateId();
     const saleData = {
       id: saleId,
-      cliente: cliente ? cliente.trim() : 'Cliente General',
+      cliente: cliente ? cliente.trim() : (customerData ? customerData.fullName : 'Cliente General'),
+      customerId: customerId || null,
       vendedor: vendedor ? vendedor.trim() : 'No asignado',
       products: validatedProducts,
       subtotal: parseFloat(subtotal.toFixed(2)),
@@ -188,6 +204,18 @@ const createSale = async (req, res) => {
     // Guardar venta
     const saleRef = db.ref(`sales/${saleId}`);
     await saleRef.set(saleData);
+
+    // Si hay cliente asociado, actualizar sus estadísticas
+    if (customerId && customerData) {
+      const updateData = {
+        totalPurchases: (customerData.totalPurchases || 0) + 1,
+        totalSpent: (customerData.totalSpent || 0) + total,
+        lastPurchaseDate: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      await db.ref(`customers/${customerId}`).update(updateData);
+    }
 
     res.status(201).json({
       success: true,

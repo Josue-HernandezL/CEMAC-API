@@ -38,6 +38,15 @@ API REST con autenticación Firebase y sistema de gestión de inventario.
 - ✅ Reportes y estadísticas de ventas
 - ✅ Integración completa con el sistema de inventario
 
+### Sistema de Clientes
+- ✅ Registro básico de clientes (nombre, apellido, fecha de nacimiento)
+- ✅ Gestión de información personal y notas
+- ✅ Seguimiento completo del historial de compras
+- ✅ Búsqueda avanzada por nombre
+- ✅ Estadísticas automáticas por cliente (total gastado, compras, etc.)
+- ✅ Integración automática con el sistema de ventas
+- ✅ Paginación y filtros en listados
+
 ### Tecnologías
 - ✅ Node.js + Express.js
 - ✅ Firebase Realtime Database
@@ -168,6 +177,15 @@ pnpm start
 - `PUT /sales/:id/status` - Actualizar estado de venta
 - `GET /sales/reports/summary` - Generar reportes de ventas
 - `GET /sales/products/search` - Buscar productos disponibles para venta
+
+### 👥 Clientes
+
+#### Todos los usuarios autenticados
+- `POST /customers` - Registrar nuevo cliente
+- `GET /customers` - Listar clientes con filtros y paginación
+- `GET /customers/search` - Búsqueda rápida de clientes
+- `GET /customers/:id` - Obtener cliente específico con historial de compras
+- `PUT /customers/:id` - Actualizar información del cliente
 
 ## 📡 Uso de la API
 
@@ -663,7 +681,308 @@ curl -X GET "http://localhost:3000/inventory/1234567890abcdef/history?page=1&lim
 }
 ```
 
-### 💰 Ejemplos de Ventas
+### � Ejemplos de Gestión de Clientes
+
+#### Registrar Nuevo Cliente (POST /customers)
+
+```bash
+# Cliente con información completa
+curl -X POST http://localhost:3000/customers \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN" \
+  -d '{
+    "firstName": "María",
+    "lastName": "González",
+    "birthDate": "1985-03-15",
+    "notes": "Cliente frecuente, prefiere productos de calidad"
+  }'
+
+# Cliente con datos mínimos
+curl -X POST http://localhost:3000/customers \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN" \
+  -d '{
+    "firstName": "Carlos",
+    "lastName": "Ruiz"
+  }'
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "message": "Cliente registrado exitosamente",
+  "data": {
+    "id": "customer_1699123456789_abc123def",
+    "firstName": "María",
+    "lastName": "González",
+    "fullName": "María González",
+    "birthDate": "1985-03-15",
+    "notes": "Cliente frecuente, prefiere productos de calidad",
+    "totalPurchases": 0,
+    "totalSpent": 0,
+    "lastPurchaseDate": null,
+    "isActive": true,
+    "createdAt": "2025-11-10T...",
+    "createdBy": "user_uid",
+    "updatedAt": "2025-11-10T..."
+  }
+}
+```
+
+**Campos requeridos:**
+- `firstName` - Nombre del cliente
+- `lastName` - Apellido del cliente
+
+**Campos opcionales:**
+- `birthDate` - Fecha de nacimiento (formato: YYYY-MM-DD)
+- `notes` - Notas adicionales sobre el cliente
+
+#### Listar Clientes (GET /customers)
+
+```bash
+# Listar todos los clientes
+curl -X GET http://localhost:3000/customers \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+
+# Con filtros y paginación
+curl -X GET "http://localhost:3000/customers?search=María&page=1&limit=10&sortBy=totalSpent&sortOrder=desc" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+```
+
+**Parámetros de consulta:**
+- `page` - Número de página (default: 1)
+- `limit` - Elementos por página (default: 10, máx: 50)
+- `search` - Buscar en nombre completo y notas
+- `sortBy` - Ordenar por: `createdAt`, `totalSpent`, `totalPurchases`, `fullName`
+- `sortOrder` - Orden: `asc`, `desc`
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "data": {
+    "customers": [
+      {
+        "id": "customer_1699123456789_abc123def",
+        "firstName": "María",
+        "lastName": "González",
+        "fullName": "María González",
+        "birthDate": "1985-03-15",
+        "notes": "Cliente frecuente, prefiere productos de calidad",
+        "totalPurchases": 5,
+        "totalSpent": 250.75,
+        "lastPurchaseDate": "2025-11-08T...",
+        "isActive": true,
+        "createdAt": "2025-10-15T...",
+        "updatedAt": "2025-11-08T..."
+      }
+    ],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 3,
+      "totalCustomers": 25,
+      "hasNextPage": true,
+      "hasPrevPage": false,
+      "limit": 10,
+      "offset": 0
+    },
+    "stats": {
+      "totalCustomers": 25,
+      "activeCustomers": 25,
+      "totalSpent": 5420.50,
+      "averageSpent": 216.82
+    }
+  },
+  "message": "Se encontraron 25 clientes"
+}
+```
+
+#### Obtener Cliente Específico (GET /customers/:id)
+
+```bash
+curl -X GET http://localhost:3000/customers/customer_1699123456789_abc123def \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "data": {
+    "customer": {
+      "id": "customer_1699123456789_abc123def",
+      "firstName": "María",
+      "lastName": "González",
+      "fullName": "María González",
+      "birthDate": "1985-03-15",
+      "notes": "Cliente frecuente, prefiere productos de calidad",
+      "totalPurchases": 5,
+      "totalSpent": 250.75,
+      "lastPurchaseDate": "2025-11-08T...",
+      "isActive": true,
+      "createdAt": "2025-10-15T...",
+      "updatedAt": "2025-11-08T..."
+    },
+    "purchaseHistory": [
+      {
+        "saleId": "sale_1699456789012_xyz789",
+        "date": "8/11/2025",
+        "total": 85.50,
+        "status": "completada",
+        "products": 3,
+        "paymentMethod": "tarjeta"
+      },
+      {
+        "saleId": "sale_1699123456789_abc456",
+        "date": "5/11/2025",
+        "total": 42.25,
+        "status": "completada",
+        "products": 2,
+        "paymentMethod": "efectivo"
+      }
+    ],
+    "summary": {
+      "totalOrders": 5,
+      "completedOrders": 5,
+      "averageOrderValue": 50.15,
+      "membershipDays": 26,
+      "daysSinceLastPurchase": 2
+    }
+  },
+  "message": "Información del cliente obtenida exitosamente"
+}
+```
+
+#### Búsqueda Rápida de Clientes (GET /customers/search)
+
+```bash
+# Búsqueda básica
+curl -X GET "http://localhost:3000/customers/search?q=María&limit=5" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+
+# Búsqueda por apellido
+curl -X GET "http://localhost:3000/customers/search?q=González" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "customer_1699123456789_abc123def",
+      "fullName": "María González",
+      "firstName": "María",
+      "lastName": "González",
+      "totalPurchases": 5,
+      "totalSpent": 250.75,
+      "lastPurchaseDate": "2025-11-08T..."
+    }
+  ],
+  "message": "Búsqueda completada - 1 resultado(s) encontrado(s)"
+}
+```
+
+#### Actualizar Cliente (PUT /customers/:id)
+
+```bash
+curl -X PUT http://localhost:3000/customers/customer_1699123456789_abc123def \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN" \
+  -d '{
+    "firstName": "María Carmen",
+    "notes": "Cliente VIP - ofrecer descuentos especiales"
+  }'
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "message": "Cliente actualizado exitosamente",
+  "data": {
+    "id": "customer_1699123456789_abc123def",
+    "firstName": "María Carmen",
+    "lastName": "González",
+    "fullName": "María Carmen González",
+    "birthDate": "1985-03-15",
+    "notes": "Cliente VIP - ofrecer descuentos especiales",
+    "totalPurchases": 5,
+    "totalSpent": 250.75,
+    "lastPurchaseDate": "2025-11-08T...",
+    "isActive": true,
+    "createdAt": "2025-10-15T...",
+    "updatedAt": "2025-11-10T..."
+  }
+}
+```
+
+#### Integración Cliente-Ventas
+
+```bash
+# Crear venta asociada a un cliente
+curl -X POST http://localhost:3000/sales \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN" \
+  -d '{
+    "customerId": "customer_1699123456789_abc123def",
+    "products": [
+      {
+        "productId": "product_123",
+        "quantity": 2,
+        "price": 25.00
+      }
+    ],
+    "paymentMethod": "tarjeta",
+    "notes": "Venta asociada al cliente María González"
+  }'
+```
+
+**🎯 Características de la Integración:**
+- ✅ **Asociación automática** del nombre del cliente en la venta
+- ✅ **Actualización automática** de estadísticas del cliente (totalPurchases, totalSpent, lastPurchaseDate)
+- ✅ **Historial completo** de compras disponible en el endpoint del cliente
+- ✅ **Validación** de que el cliente existe y está activo antes de crear la venta
+
+### Validaciones del Sistema de Clientes
+
+#### Errores Comunes
+
+**1. Campos requeridos faltantes:**
+```json
+{
+  "success": false,
+  "message": "Nombre y apellido son obligatorios"
+}
+```
+
+**2. Formato de fecha inválido:**
+```json
+{
+  "success": false,
+  "message": "Formato de fecha inválido. Use YYYY-MM-DD"
+}
+```
+
+**3. Cliente no encontrado:**
+```json
+{
+  "success": false,
+  "message": "Cliente no encontrado"
+}
+```
+
+**4. Cliente inactivo en venta:**
+```json
+{
+  "success": false,
+  "message": "Cliente no encontrado o inactivo"
+}
+```
+
+### �💰 Ejemplos de Ventas
 
 #### Crear Nueva Venta (POST /sales)
 
