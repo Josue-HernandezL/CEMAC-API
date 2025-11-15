@@ -104,12 +104,14 @@ const getProducts = async (req, res) => {
     // Aplicar filtros
     let filteredProducts = products.filter(product => product.isActive !== false);
 
-    // Filtro por búsqueda en nombre y descripción
+    // Filtro por búsqueda en nombre, descripción, código de barras y código de proveedor
     if (search) {
       const searchTerm = search.toLowerCase();
       filteredProducts = filteredProducts.filter(product => 
         (product.name && product.name.toLowerCase().includes(searchTerm)) ||
-        (product.description && product.description.toLowerCase().includes(searchTerm))
+        (product.description && product.description.toLowerCase().includes(searchTerm)) ||
+        (product.barcode && product.barcode.toLowerCase().includes(searchTerm)) ||
+        (product.supplierCode && product.supplierCode.toLowerCase().includes(searchTerm))
       );
     }
 
@@ -226,7 +228,7 @@ const getProducts = async (req, res) => {
 // POST /inventory - Añadir producto
 const createProduct = async (req, res) => {
   try {
-    const { name, description, price, promotionalPrice, availability, category, stock } = req.body;
+    const { name, description, price, promotionalPrice, availability, category, stock, barcode, supplierCode } = req.body;
     const userId = req.user.uid;
 
     // Validaciones
@@ -278,6 +280,8 @@ const createProduct = async (req, res) => {
       availability,
       category: category ? category.trim() : null,
       stock: availability === 'limited' ? parseInt(stock) : null,
+      barcode: barcode ? barcode.trim() : null,
+      supplierCode: supplierCode ? supplierCode.trim() : null,
       imageUrl,
       isActive: true,
       createdAt: new Date().toISOString(),
@@ -354,7 +358,7 @@ const getProductById = async (req, res) => {
 const updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, price, promotionalPrice, availability, category, stock } = req.body;
+    const { name, description, price, promotionalPrice, availability, category, stock, barcode, supplierCode } = req.body;
     const userId = req.user.uid;
 
     // Verificar que el producto existe
@@ -420,6 +424,8 @@ const updateProduct = async (req, res) => {
     if (stock !== undefined && availability === 'limited') {
       updatedData.stock = parseInt(stock);
     }
+    if (barcode !== undefined) updatedData.barcode = barcode ? barcode.trim() : null;
+    if (supplierCode !== undefined) updatedData.supplierCode = supplierCode ? supplierCode.trim() : null;
     if (imageUrl !== undefined) {
       updatedData.imageUrl = imageUrl;
     }

@@ -27,6 +27,8 @@ API REST con autenticación Firebase y sistema de gestión de inventario.
 - ✅ Paginación y ordenamiento
 - ✅ Categorización de productos
 - ✅ Disponibilidad limitada e ilimitada
+- ✅ **Código de barras** y **código de proveedor** por producto
+- ✅ Búsqueda por código de barras y código de proveedor
 
 ### Sistema de Ventas
 - ✅ CRUD completo de ventas
@@ -487,7 +489,7 @@ curl -X GET "http://localhost:3000/inventory?search=ejemplo&category=electronics
 ```
 
 **Parámetros de consulta disponibles:**
-- `search` - Buscar en nombre y descripción
+- `search` - Buscar en nombre, descripción, código de barras y código de proveedor
 - `category` - Filtrar por categoría
 - `availability` - `limited`, `unlimited`, `out-of-stock`
 - `minPrice` / `maxPrice` - Rango de precios
@@ -509,6 +511,8 @@ curl -X GET "http://localhost:3000/inventory?search=ejemplo&category=electronics
       "availability": "limited",
       "category": "electronics",
       "stock": 50,
+      "barcode": "7501234567890",
+      "supplierCode": "PROV-2024-001",
       "imageUrl": "https://res.cloudinary.com/...",
       "isActive": true,
       "createdAt": "2025-09-24T...",
@@ -551,7 +555,9 @@ curl -X POST http://localhost:3000/inventory \
     "promotionalPrice": 149.99,
     "availability": "limited",
     "category": "electronics",
-    "stock": 25
+    "stock": 25,
+    "barcode": "7501234567890",
+    "supplierCode": "PROV-2024-001"
   }'
 
 # Con imagen (usar multipart/form-data)
@@ -563,6 +569,8 @@ curl -X POST http://localhost:3000/inventory \
   -F "availability=limited" \
   -F "stock=10" \
   -F "category=gadgets" \
+  -F "barcode=7501234567890" \
+  -F "supplierCode=PROV-2024-001" \
   -F "image=@/ruta/a/imagen.jpg"
 ```
 
@@ -576,6 +584,8 @@ curl -X POST http://localhost:3000/inventory \
 - `promotionalPrice` - Precio promocional
 - `category` - Categoría del producto
 - `stock` - Stock inicial (requerido si availability es "limited")
+- `barcode` - Código de barras del producto
+- `supplierCode` - Código de proveedor
 - `image` - Archivo de imagen (máximo 5MB)
 
 ### Obtener Producto (GET /inventory/:id)
@@ -596,9 +606,13 @@ curl -X PUT http://localhost:3000/inventory/1234567890abcdef \
   -d '{
     "name": "Producto Actualizado",
     "price": 249.99,
-    "promotionalPrice": null
+    "promotionalPrice": null,
+    "barcode": "7509876543210",
+    "supplierCode": "PROV-2024-002"
   }'
 ```
+
+**Nota:** Todos los campos del producto son opcionales en la actualización, incluyendo `barcode` y `supplierCode`. Solo se actualizan los campos enviados en la solicitud.
 
 ### Eliminar Producto (DELETE /inventory/:id)
 
