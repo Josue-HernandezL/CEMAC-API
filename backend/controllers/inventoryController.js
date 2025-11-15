@@ -253,6 +253,27 @@ const createProduct = async (req, res) => {
       });
     }
 
+    // Validar que la categoría exista si se proporciona
+    if (category && category.trim() !== '') {
+      const categoriesRef = db.ref('inventory/categories');
+      const categoriesSnapshot = await categoriesRef.once('value');
+      
+      let categoryExists = false;
+      if (categoriesSnapshot.exists()) {
+        const categories = Object.values(categoriesSnapshot.val());
+        categoryExists = categories.some(cat => 
+          cat.name.toLowerCase() === category.trim().toLowerCase()
+        );
+      }
+
+      if (!categoryExists) {
+        return res.status(400).json({
+          success: false,
+          message: 'La categoría especificada no existe. Por favor, créala primero en /categories'
+        });
+      }
+    }
+
     const productId = generateId();
     let imageUrl = null;
 
@@ -292,6 +313,26 @@ const createProduct = async (req, res) => {
     // Guardar producto
     const productRef = db.ref(`inventory/products/${productId}`);
     await productRef.set(product);
+
+    // Actualizar contador de productos en la categoría
+    if (category && category.trim() !== '') {
+      const categoriesRef = db.ref('inventory/categories');
+      const categoriesSnapshot = await categoriesRef.once('value');
+      
+      if (categoriesSnapshot.exists()) {
+        const categories = categoriesSnapshot.val();
+        const categoryEntry = Object.entries(categories).find(([id, cat]) => 
+          cat.name.toLowerCase() === category.trim().toLowerCase()
+        );
+        
+        if (categoryEntry) {
+          const [categoryId, categoryData] = categoryEntry;
+          await db.ref(`inventory/categories/${categoryId}`).update({
+            productCount: (categoryData.productCount || 0) + 1
+          });
+        }
+      }
+    }
 
     // Registrar movimiento de stock inicial si es necesario
     if (availability === 'limited' && parseInt(stock) > 0) {
@@ -389,6 +430,28 @@ const updateProduct = async (req, res) => {
       });
     }
 
+    // Validar que la categoría exista si se proporciona y cambió
+    if (category !== undefined && category && category.trim() !== '' && 
+        category.trim() !== currentProduct.category) {
+      const categoriesRef = db.ref('inventory/categories');
+      const categoriesSnapshot = await categoriesRef.once('value');
+      
+      let categoryExists = false;
+      if (categoriesSnapshot.exists()) {
+        const categories = Object.values(categoriesSnapshot.val());
+        categoryExists = categories.some(cat => 
+          cat.name.toLowerCase() === category.trim().toLowerCase()
+        );
+      }
+
+      if (!categoryExists) {
+        return res.status(400).json({
+          success: false,
+          message: 'La categoría especificada no existe. Por favor, créala primero en /categories'
+        });
+      }
+    }
+
     let imageUrl = currentProduct.imageUrl;
 
     // Subir nueva imagen si se proporciona
@@ -428,6 +491,44 @@ const updateProduct = async (req, res) => {
     if (supplierCode !== undefined) updatedData.supplierCode = supplierCode ? supplierCode.trim() : null;
     if (imageUrl !== undefined) {
       updatedData.imageUrl = imageUrl;
+    }
+
+    // Actualizar contadores de categorías si cambió la categoría
+    if (category !== undefined && category !== currentProduct.category) {
+      const categoriesRef = db.ref('inventory/categories');
+      const categoriesSnapshot = await categoriesRef.once('value');
+      
+      if (categoriesSnapshot.exists()) {
+        const categories = categoriesSnapshot.val();
+        
+        // Decrementar contador de categoría anterior
+        if (currentProduct.category) {
+          const oldCategoryEntry = Object.entries(categories).find(([id, cat]) => 
+            cat.name.toLowerCase() === currentProduct.category.toLowerCase()
+          );
+          
+          if (oldCategoryEntry) {
+            const [oldCategoryId, oldCategoryData] = oldCategoryEntry;
+            await db.ref(`inventory/categories/${oldCategoryId}`).update({
+              productCount: Math.max((oldCategoryData.productCount || 1) - 1, 0)
+            });
+          }
+        }
+        
+        // Incrementar contador de nueva categoría
+        if (category && category.trim() !== '') {
+          const newCategoryEntry = Object.entries(categories).find(([id, cat]) => 
+            cat.name.toLowerCase() === category.trim().toLowerCase()
+          );
+          
+          if (newCategoryEntry) {
+            const [newCategoryId, newCategoryData] = newCategoryEntry;
+            await db.ref(`inventory/categories/${newCategoryId}`).update({
+              productCount: (newCategoryData.productCount || 0) + 1
+            });
+          }
+        }
+      }
     }
 
     // Actualizar producto
@@ -484,6 +585,26 @@ const deleteProduct = async (req, res) => {
     };
 
     await productRef.set(updatedProduct);
+
+    // Decrementar contador de categoría
+    if (product.category) {
+      const categoriesRef = db.ref('inventory/categories');
+      const categoriesSnapshot = await categoriesRef.once('value');
+      
+      if (categoriesSnapshot.exists()) {
+        const categories = categoriesSnapshot.val();
+        const categoryEntry = Object.entries(categories).find(([id, cat]) => 
+          cat.name.toLowerCase() === product.category.toLowerCase()
+        );
+        
+        if (categoryEntry) {
+          const [categoryId, categoryData] = categoryEntry;
+          await db.ref(`inventory/categories/${categoryId}`).update({
+            productCount: Math.max((categoryData.productCount || 1) - 1, 0)
+          });
+        }
+      }
+    }
 
     res.status(200).json({
       success: true,
