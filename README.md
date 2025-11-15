@@ -30,6 +30,16 @@ API REST con autenticación Firebase y sistema de gestión de inventario.
 - ✅ **Código de barras** y **código de proveedor** por producto
 - ✅ Búsqueda por código de barras y código de proveedor
 
+### Sistema de Categorías
+- ✅ CRUD completo de categorías de productos
+- ✅ Validación de nombres únicos
+- ✅ Búsqueda de categorías por nombre y descripción
+- ✅ Estadísticas detalladas por categoría
+- ✅ **Integración con inventario** - Validación automática al crear/actualizar productos
+- ✅ **Actualización en cascada** - Renombrar categoría actualiza todos los productos
+- ✅ **Contadores automáticos** - productCount se actualiza automáticamente
+- ✅ **Protección de integridad** - No se pueden eliminar categorías con productos
+
 ### Sistema de Ventas
 - ✅ CRUD completo de ventas
 - ✅ Registro de ventas con múltiples productos
@@ -169,6 +179,17 @@ pnpm start
 - `PUT /inventory/:id` - Actualizar producto
 - `DELETE /inventory/:id` - Eliminar producto (soft delete)
 - `POST /inventory/:id/stock` - Actualizar stock (entrada/salida)
+
+### 🏷️ Categorías
+
+#### Lectura (usuarios y administradores)
+- `GET /categories` - Listar todas las categorías
+- `GET /categories/:id/stats` - Obtener estadísticas de una categoría
+
+#### Escritura (solo administradores)
+- `POST /categories` - Crear nueva categoría
+- `PUT /categories/:id` - Actualizar categoría
+- `DELETE /categories/:id` - Eliminar categoría
 
 ### 💰 Ventas
 
@@ -996,7 +1017,343 @@ curl -X POST http://localhost:3000/sales \
 }
 ```
 
-### �💰 Ejemplos de Ventas
+### 🏷️ Ejemplos de Gestión de Categorías
+
+#### Listar Todas las Categorías (GET /categories)
+
+```bash
+# Listar todas las categorías
+curl -X GET http://localhost:3000/categories \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+
+# Buscar categorías
+curl -X GET "http://localhost:3000/categories?search=electrónica" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "categories": [
+    {
+      "id": "cat_1699123456789_abc",
+      "name": "Electrónica",
+      "description": "Productos electrónicos y tecnología",
+      "productCount": 45,
+      "createdAt": "2025-11-10T...",
+      "updatedAt": "2025-11-10T...",
+      "createdBy": "admin_uid"
+    },
+    {
+      "id": "cat_1699123456789_def",
+      "name": "Papelería",
+      "description": "Artículos de oficina y escolares",
+      "productCount": 128,
+      "createdAt": "2025-11-10T...",
+      "updatedAt": "2025-11-10T...",
+      "createdBy": "admin_uid"
+    }
+  ],
+  "total": 2,
+  "message": "Se encontraron 2 categoría(s)"
+}
+```
+
+**Campos de respuesta:**
+- `id` - ID único de la categoría
+- `name` - Nombre de la categoría
+- `description` - Descripción opcional
+- `productCount` - Número de productos en esta categoría
+- `createdAt` - Fecha de creación
+- `updatedAt` - Fecha de última actualización
+- `createdBy` - ID del usuario que creó la categoría
+
+#### Crear Nueva Categoría (POST /categories)
+
+**⚠️ Solo administradores**
+
+```bash
+# Categoría con descripción
+curl -X POST http://localhost:3000/categories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Tecnología",
+    "description": "Productos tecnológicos y gadgets"
+  }'
+
+# Categoría sin descripción
+curl -X POST http://localhost:3000/categories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Hogar"
+  }'
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "message": "Categoría creada exitosamente",
+  "category": {
+    "id": "cat_1699123456789_xyz",
+    "name": "Tecnología",
+    "description": "Productos tecnológicos y gadgets",
+    "productCount": 0,
+    "createdAt": "2025-11-15T10:30:00Z",
+    "updatedAt": "2025-11-15T10:30:00Z",
+    "createdBy": "admin_uid"
+  }
+}
+```
+
+**Campos requeridos:**
+- `name` - Nombre de la categoría (único)
+
+**Campos opcionales:**
+- `description` - Descripción de la categoría
+
+**Validaciones:**
+- ✅ El nombre es requerido y no puede estar vacío
+- ✅ El nombre debe ser único (case-insensitive)
+- ✅ Solo administradores pueden crear categorías
+
+#### Actualizar Categoría (PUT /categories/:id)
+
+**⚠️ Solo administradores**
+
+```bash
+# Actualizar nombre y descripción
+curl -X PUT http://localhost:3000/categories/cat_1699123456789_xyz \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Tecnología Avanzada",
+    "description": "Productos de tecnología de última generación"
+  }'
+
+# Actualizar solo el nombre
+curl -X PUT http://localhost:3000/categories/cat_1699123456789_xyz \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Tech"
+  }'
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "message": "Categoría actualizada exitosamente",
+  "category": {
+    "id": "cat_1699123456789_xyz",
+    "name": "Tecnología Avanzada",
+    "description": "Productos de tecnología de última generación",
+    "productCount": 15,
+    "createdAt": "2025-11-15T10:30:00Z",
+    "updatedAt": "2025-11-15T11:45:00Z",
+    "createdBy": "admin_uid",
+    "updatedBy": "admin_uid"
+  }
+}
+```
+
+**Características importantes:**
+- ✅ **Actualización en cascada**: Si cambias el nombre, se actualiza automáticamente en todos los productos
+- ✅ Validación de nombre único
+- ✅ Solo administradores pueden actualizar
+- ✅ Todos los campos son opcionales (solo se actualizan los proporcionados)
+
+#### Eliminar Categoría (DELETE /categories/:id)
+
+**⚠️ Solo administradores**
+
+```bash
+curl -X DELETE http://localhost:3000/categories/cat_1699123456789_xyz \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "message": "Categoría eliminada exitosamente",
+  "categoryId": "cat_1699123456789_xyz"
+}
+```
+
+**Error si tiene productos asociados:**
+```json
+{
+  "success": false,
+  "message": "No se puede eliminar la categoría porque tiene 15 producto(s) asociado(s)"
+}
+```
+
+**Validaciones:**
+- ✅ No se puede eliminar una categoría con productos asociados
+- ✅ Solo administradores pueden eliminar
+- ✅ Protección de integridad referencial
+
+#### Obtener Estadísticas de Categoría (GET /categories/:id/stats)
+
+```bash
+curl -X GET http://localhost:3000/categories/cat_1699123456789_xyz/stats \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "category": {
+    "id": "cat_1699123456789_xyz",
+    "name": "Tecnología",
+    "description": "Productos tecnológicos y gadgets",
+    "productCount": 45,
+    "createdAt": "2025-11-15T10:30:00Z",
+    "updatedAt": "2025-11-15T10:30:00Z",
+    "createdBy": "admin_uid"
+  },
+  "stats": {
+    "productCount": 45,
+    "activeProducts": 43,
+    "limitedProducts": 35,
+    "unlimitedProducts": 8,
+    "totalStock": 1250,
+    "lowStockProducts": 5,
+    "averagePrice": 299.99
+  },
+  "message": "Estadísticas obtenidas exitosamente"
+}
+```
+
+**Estadísticas incluidas:**
+- `productCount` - Total de productos en la categoría
+- `activeProducts` - Productos activos (no eliminados)
+- `limitedProducts` - Productos con disponibilidad limitada
+- `unlimitedProducts` - Productos con disponibilidad ilimitada
+- `totalStock` - Stock total de todos los productos
+- `lowStockProducts` - Productos con stock bajo (stock <= minStock)
+- `averagePrice` - Precio promedio de los productos
+
+### Integración de Categorías con Inventario
+
+#### Crear Producto con Categoría Validada
+
+Al crear un producto, **la categoría debe existir previamente**:
+
+```bash
+# 1. Primero crear la categoría
+curl -X POST http://localhost:3000/categories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Electrónica"
+  }'
+
+# 2. Luego crear el producto
+curl -X POST http://localhost:3000/inventory \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Laptop Gaming",
+    "description": "Laptop de alto rendimiento",
+    "price": 1299.99,
+    "availability": "limited",
+    "category": "Electrónica",
+    "stock": 10
+  }'
+```
+
+**Si la categoría no existe:**
+```json
+{
+  "success": false,
+  "message": "La categoría especificada no existe. Por favor, créala primero en /categories"
+}
+```
+
+#### Actualización Automática de Contadores
+
+El sistema actualiza automáticamente el contador `productCount`:
+
+**Al crear un producto:**
+- ➕ Se incrementa `productCount` de la categoría
+
+**Al actualizar la categoría de un producto:**
+- ➖ Se decrementa `productCount` de la categoría anterior
+- ➕ Se incrementa `productCount` de la nueva categoría
+
+**Al eliminar un producto:**
+- ➖ Se decrementa `productCount` de la categoría
+
+#### Renombrar Categoría en Todos los Productos
+
+Cuando actualizas el nombre de una categoría, **todos los productos se actualizan automáticamente**:
+
+```bash
+# Cambiar nombre de "Electrónica" a "Tecnología"
+curl -X PUT http://localhost:3000/categories/cat_123/
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Tecnología"
+  }'
+```
+
+Resultado:
+- ✅ Categoría renombrada
+- ✅ Todos los productos con `category: "Electrónica"` ahora tienen `category: "Tecnología"`
+- ✅ Actualización en cascada automática
+
+### Validaciones del Sistema de Categorías
+
+#### Errores Comunes
+
+**1. Nombre requerido:**
+```json
+{
+  "success": false,
+  "message": "El nombre de la categoría es requerido"
+}
+```
+
+**2. Categoría duplicada:**
+```json
+{
+  "success": false,
+  "message": "Ya existe una categoría con ese nombre"
+}
+```
+
+**3. Categoría no encontrada:**
+```json
+{
+  "success": false,
+  "message": "Categoría no encontrada"
+}
+```
+
+**4. No se puede eliminar con productos:**
+```json
+{
+  "success": false,
+  "message": "No se puede eliminar la categoría porque tiene 45 producto(s) asociado(s)"
+}
+```
+
+**5. Sin permisos de administrador:**
+```json
+{
+  "error": "Acceso denegado. Se requieren permisos de administrador"
+}
+```
+
+### 💰 Ejemplos de Ventas
 
 #### Crear Nueva Venta (POST /sales)
 
@@ -1875,12 +2232,37 @@ El sistema implementa un middleware especializado `requireAdminAccess` para prot
 CEMAC-API/
 ├── backend/
 │   ├── controllers/
-│   │   ├── authController.js      # Lógica de autenticación
-│   │   ├── inventoryController.js # Lógica de inventario
-│   │   └── salesController.js     # Lógica de ventas
+│   │   ├── authController.js         # Lógica de autenticación
+│   │   ├── inventoryController.js    # Lógica de inventario
+│   │   ├── categoriesController.js   # Lógica de categorías
+│   │   ├── salesController.js        # Lógica de ventas
+│   │   ├── customersController.js    # Lógica de clientes
+│   │   └── analysisController.js     # Lógica de análisis
 │   ├── middleware/
-│   │   └── auth.js                # Middleware de autenticación + requireAdminAccess
+│   │   └── auth.js                   # Middleware de autenticación + requireAdminAccess
 │   ├── routes/
+│   │   ├── authRoutes.js             # Rutas de autenticación
+│   │   ├── inventoryRoutes.js        # Rutas de inventario
+│   │   ├── categoriesRoutes.js       # Rutas de categorías
+│   │   ├── salesRoutes.js            # Rutas de ventas
+│   │   ├── customersRoutes.js        # Rutas de clientes
+│   │   └── analysisRoutes.js         # Rutas de análisis
+│   └── scripts/
+│       ├── setupDatabase.js          # Configuración inicial
+│       ├── setupInventory.js         # Configuración del módulo de inventario
+│       ├── setupSales.js             # Configuración del módulo de ventas
+│       └── updateAdminPassword.js    # Actualizar contraseña admin
+├── test/
+│   ├── auth.test.js                  # Pruebas de autenticación
+│   ├── inventory.test.js             # Pruebas del inventario
+│   ├── sales.test.js                 # Pruebas del sistema de ventas
+│   └── customers.test.js             # Pruebas del sistema de clientes
+├── .env                              # Variables de entorno
+├── firebaseConfig.js                 # Configuración Firebase
+├── index.js                          # Servidor principal
+├── package.json                      # Dependencias
+└── serviceAccountKey.json            # Credenciales Firebase
+```
 │   │   ├── authRoutes.js          # Rutas de autenticación
 │   │   ├── inventoryRoutes.js     # Rutas de inventario
 │   │   └── salesRoutes.js         # Rutas de ventas
