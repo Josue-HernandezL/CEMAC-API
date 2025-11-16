@@ -2141,6 +2141,595 @@ curl -X GET http://localhost:3000/analysis/sales \
   -H "Authorization: Bearer YOUR_TOKEN" | jq '.data.topProducts'
 ```
 
+---
+
+## 🚨 Sistema de Alertas
+
+El sistema de alertas permite monitorear el inventario y gestionar notificaciones para eventos críticos como stock bajo, productos agotados y otras situaciones que requieren atención.
+
+### 🔔 Endpoints de Alertas
+
+| Método | Endpoint | Autenticación | Descripción |
+|--------|----------|---------------|-------------|
+| POST | `/alerts/generate` | Admin | Generar alertas automáticas |
+| GET | `/alerts` | User/Admin | Listar con filtros |
+| GET | `/alerts/latest-critical` | User/Admin | Última alerta crítica |
+| GET | `/alerts/count` | User/Admin | Contadores |
+| GET | `/alerts/history` | User/Admin | Historial |
+| GET | `/alerts/:alertId` | User/Admin | Obtener por ID |
+| PUT | `/alerts/mark-all-read` | User/Admin | Marcar todas |
+| PUT | `/alerts/settings/thresholds` | Admin | Configurar umbrales |
+| PUT | `/alerts/:alertId/status` | User/Admin | Actualizar estado |
+| DELETE | `/alerts/:alertId` | Admin | Eliminar alerta |
+
+### 📋 Estructura de Datos de Alertas
+
+```json
+{
+  "id": "alert_1234567890_abc123xyz",
+  "type": "stock_low",
+  "priority": "urgente",
+  "status": "pendiente",
+  "productId": "prod_123",
+  "productName": "Cuaderno Profesional 100 hojas",
+  "productCategory": "Cuadernos y Libretas",
+  "currentStock": 5,
+  "minThreshold": 20,
+  "message": "Stock bajo: Solo quedan 5 unidades de Cuaderno Profesional 100 hojas en Cuadernos y Libretas",
+  "createdAt": "2024-01-15T10:30:00.000Z",
+  "updatedAt": "2024-01-15T14:20:00.000Z",
+  "resolvedAt": null,
+  "resolvedBy": null,
+  "actions": [
+    {
+      "actionType": "status_change",
+      "previousStatus": "pendiente",
+      "newStatus": "en_proceso",
+      "userId": "user_id_123",
+      "userName": "Juan Pérez",
+      "timestamp": "2024-01-15T14:20:00.000Z",
+      "notes": "Pedido realizado al proveedor"
+    }
+  ]
+}
+```
+
+### 🎯 Tipos de Alerta
+
+- **`stock_low`** - Stock por debajo del umbral mínimo
+- **`stock_out`** - Producto completamente agotado (stock = 0)
+- **`expiration`** - Producto próximo a vencer
+- **`price_change`** - Cambio significativo de precio
+- **`other`** - Otras alertas personalizadas
+
+### 🔴 Niveles de Prioridad
+
+- **`critica`** - Stock agotado (0 unidades), requiere atención inmediata
+- **`urgente`** - Stock muy bajo (< 10 unidades)
+- **`media`** - Stock bajo pero dentro de límites manejables
+- **`baja`** - Alertas informativas
+
+### 🔄 Estados de Alerta
+
+- **`pendiente`** - Alerta nueva sin atender
+- **`en_proceso`** - Alguien está trabajando en resolver la alerta
+- **`atendido`** - Alerta solucionada exitosamente
+- **`descartado`** - Alerta ignorada o no relevante
+
+### 📡 Ejemplos de Uso
+
+#### 1. Generar Alertas Automáticas (POST /alerts/generate)
+
+**⚠️ Solo administradores**
+
+```bash
+curl -X POST http://localhost:3000/alerts/generate \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "message": "Alertas generadas exitosamente",
+  "data": {
+    "totalGenerated": 8,
+    "byPriority": {
+      "urgente": 2,
+      "alta": 3,
+      "media": 2,
+      "baja": 1
+    },
+    "alerts": [
+      {
+        "id": "alert_1234567890_abc",
+        "type": "stock_low",
+        "priority": "urgente",
+        "productName": "Cuaderno Profesional",
+        "currentStock": 0,
+        "minThreshold": 20,
+        "message": "Producto agotado: Cuaderno Profesional en Papelería"
+      }
+    ]
+  }
+}
+```
+
+**Características:**
+- ✅ Analiza todo el inventario
+- ✅ Solo productos con `availability: "limited"`
+- ✅ No genera alertas duplicadas
+- ✅ Asigna prioridad automáticamente según umbrales
+
+#### 2. Listar Alertas con Filtros (GET /alerts)
+
+```bash
+# Todas las alertas
+curl -X GET http://localhost:3000/alerts \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# Con filtros
+curl -X GET "http://localhost:3000/alerts?status=pendiente&priority=urgente&page=1&limit=10&sortBy=date&sortOrder=desc" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Parámetros disponibles:**
+- `status` - `pendiente`, `en_proceso`, `atendido`, `descartado`
+- `priority` - `critica`, `urgente`, `media`, `baja`
+- `startDate` / `endDate` - Rango de fechas (YYYY-MM-DD)
+- `page` / `limit` - Paginación (default: 1, 50)
+- `sortBy` - `date`, `priority`, `productName`
+- `sortOrder` - `asc`, `desc`
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "message": "Alertas obtenidas exitosamente",
+  "data": {
+    "alerts": [...],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 3,
+      "totalAlerts": 25,
+      "hasNextPage": true,
+      "hasPrevPage": false,
+      "limit": 10
+    },
+    "summary": {
+      "total": 25,
+      "byStatus": {
+        "pendiente": 10,
+        "en_proceso": 8,
+        "atendido": 5,
+        "descartado": 2
+      },
+      "byPriority": {
+        "urgente": 3,
+        "alta": 8,
+        "media": 10,
+        "baja": 4
+      }
+    }
+  }
+}
+```
+
+#### 3. Obtener Última Alerta Crítica (GET /alerts/latest-critical)
+
+```bash
+curl -X GET http://localhost:3000/alerts/latest-critical \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Respuesta (con alerta):**
+```json
+{
+  "success": true,
+  "data": {
+    "hasAlert": true,
+    "alert": {
+      "id": "alert_1234567890_abc",
+      "type": "stock_low",
+      "priority": "urgente",
+      "status": "pendiente",
+      "productName": "Cuaderno Profesional",
+      "currentStock": 0,
+      "message": "Producto agotado: Cuaderno Profesional en Papelería",
+      "createdAt": "2025-11-10T10:30:00.000Z"
+    }
+  }
+}
+```
+
+**Respuesta (sin alertas):**
+```json
+{
+  "success": true,
+  "data": {
+    "hasAlert": false,
+    "alert": null
+  }
+}
+```
+
+#### 4. Obtener Alerta Específica (GET /alerts/:alertId)
+
+```bash
+curl -X GET http://localhost:3000/alerts/alert_1234567890_abc \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "alert_1234567890_abc",
+    "type": "stock_low",
+    "priority": "urgente",
+    "status": "en_proceso",
+    "productName": "Cuaderno Profesional",
+    "currentStock": 0,
+    "message": "Producto agotado",
+    "createdAt": "2025-11-10T10:30:00.000Z",
+    "updatedAt": "2025-11-10T11:00:00.000Z",
+    "actions": [
+      {
+        "actionType": "status_change",
+        "previousStatus": "pendiente",
+        "newStatus": "en_proceso",
+        "userId": "user_123",
+        "userName": "Juan Pérez",
+        "timestamp": "2025-11-10T11:00:00.000Z",
+        "notes": "Revisando inventario"
+      }
+    ]
+  }
+}
+```
+
+#### 5. Actualizar Estado de Alerta (PUT /alerts/:alertId/status)
+
+```bash
+curl -X PUT http://localhost:3000/alerts/alert_1234567890_abc/status \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "status": "atendido",
+    "notes": "Se realizó pedido al proveedor. Llegará en 3 días."
+  }'
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "message": "Estado de alerta actualizado a: atendido",
+  "data": {
+    "id": "alert_1234567890_abc",
+    "status": "atendido",
+    "resolvedAt": "2025-11-10T12:00:00.000Z",
+    "resolvedBy": "user_123",
+    "lastAction": {
+      "actionType": "status_change",
+      "previousStatus": "en_proceso",
+      "newStatus": "atendido",
+      "userName": "Juan Pérez",
+      "notes": "Se realizó pedido al proveedor. Llegará en 3 días."
+    }
+  }
+}
+```
+
+#### 6. Marcar Todas como Atendidas (PUT /alerts/mark-all-read)
+
+```bash
+# Sin filtros (todas las alertas)
+curl -X PUT http://localhost:3000/alerts/mark-all-read \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{}'
+
+# Con filtros
+curl -X PUT http://localhost:3000/alerts/mark-all-read \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "filters": {
+      "priority": "baja",
+      "status": "pendiente"
+    },
+    "notes": "Revisión masiva de alertas"
+  }'
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "message": "15 alertas marcadas como atendidas",
+  "data": {
+    "totalProcessed": 15,
+    "byPriority": {
+      "urgente": 0,
+      "alta": 2,
+      "media": 5,
+      "baja": 8
+    },
+    "timestamp": "2025-11-10T13:00:00.000Z"
+  }
+}
+```
+
+#### 7. Obtener Contadores (GET /alerts/count)
+
+```bash
+curl -X GET http://localhost:3000/alerts/count \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "data": {
+    "total": 25,
+    "pending": 10,
+    "inProgress": 8,
+    "resolved": 7,
+    "byStatus": {
+      "pendiente": 10,
+      "en_proceso": 8,
+      "atendido": 5,
+      "descartado": 2
+    },
+    "byPriority": {
+      "urgente": 3,
+      "alta": 8,
+      "media": 10,
+      "baja": 4
+    },
+    "criticalAlerts": 11,
+    "lastUpdated": "2025-11-10T13:00:00.000Z"
+  }
+}
+```
+
+#### 8. Configurar Umbrales (PUT /alerts/settings/thresholds)
+
+**⚠️ Solo administradores**
+
+```bash
+curl -X PUT http://localhost:3000/alerts/settings/thresholds \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "stockThresholds": {
+      "urgente": 0,
+      "alta": 5,
+      "media": 15,
+      "baja": 25
+    }
+  }'
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "message": "Umbrales actualizados exitosamente",
+  "data": {
+    "stockThresholds": {
+      "urgente": 0,
+      "alta": 5,
+      "media": 15,
+      "baja": 25
+    },
+    "updatedAt": "2025-11-10T14:00:00.000Z",
+    "updatedBy": "admin_user_id"
+  }
+}
+```
+
+#### 9. Obtener Historial (GET /alerts/history)
+
+```bash
+# Historial general
+curl -X GET http://localhost:3000/alerts/history \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# Filtrado por mes
+curl -X GET "http://localhost:3000/alerts/history?month=2025-11&limit=50" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "data": {
+    "alerts": [
+      {
+        "id": "alert_1234567890_abc",
+        "productName": "Cuaderno Profesional",
+        "priority": "urgente",
+        "finalStatus": "atendido",
+        "createdAt": "2025-11-10T10:30:00.000Z",
+        "resolvedAt": "2025-11-10T12:00:00.000Z",
+        "resolutionTime": 5400000,
+        "resolvedBy": "user_123"
+      }
+    ],
+    "metrics": {
+      "totalResolved": 45,
+      "averageResolutionTime": 7200000,
+      "resolvedByStatus": {
+        "atendido": 38,
+        "descartado": 7
+      },
+      "fastestResolution": 1800000,
+      "slowestResolution": 86400000
+    },
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 1,
+      "total": 45
+    }
+  }
+}
+```
+
+#### 10. Eliminar Alerta (DELETE /alerts/:alertId)
+
+**⚠️ Solo administradores**
+
+```bash
+curl -X DELETE http://localhost:3000/alerts/alert_1234567890_abc \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "message": "Alerta eliminada exitosamente",
+  "data": {
+    "deletedAlertId": "alert_1234567890_abc",
+    "deletedAt": "2025-11-10T15:00:00.000Z",
+    "deletedBy": "admin_user_id"
+  }
+}
+```
+
+### ⚙️ Configuración de Alertas
+
+**Umbrales por defecto:**
+- **Urgente**: 0 unidades (stock agotado)
+- **Alta**: 5 unidades
+- **Media**: 10 unidades
+- **Baja**: 20 unidades
+
+**Script de configuración inicial:**
+```bash
+node backend/scripts/setupAlerts.js
+```
+
+### 🔄 Generación Automática de Alertas
+
+Las alertas se generan automáticamente cuando:
+1. Se actualiza el stock de un producto (`POST /inventory/:id/stock`)
+2. Se ejecuta manualmente (`POST /alerts/generate`)
+
+**Lógica de prioridad automática:**
+```javascript
+if (currentStock === 0) {
+  priority = 'urgente'  // Stock agotado
+} else if (currentStock < 10) {
+  priority = 'alta'     // Stock crítico
+} else {
+  priority = 'media'    // Stock bajo
+}
+```
+
+**Prevención de duplicados:**
+- No se crean alertas duplicadas para el mismo producto
+- Solo se genera una nueva alerta cuando la anterior está resuelta o descartada
+
+### ⚠️ Validaciones de Alertas
+
+**Errores comunes:**
+
+1. **Campo requerido faltante:**
+```json
+{
+  "success": false,
+  "error": "El campo status es requerido",
+  "code": "MISSING_STATUS",
+  "validStatuses": ["pendiente", "en_proceso", "atendido", "descartado"]
+}
+```
+
+2. **Estado inválido:**
+```json
+{
+  "success": false,
+  "error": "Estado inválido",
+  "code": "INVALID_STATUS",
+  "validStatuses": ["pendiente", "en_proceso", "atendido", "descartado"]
+}
+```
+
+3. **Alerta no encontrada:**
+```json
+{
+  "success": false,
+  "error": "Alerta no encontrada",
+  "code": "ALERT_NOT_FOUND"
+}
+```
+
+4. **Umbrales inválidos:**
+```json
+{
+  "success": false,
+  "error": "Valores de umbral inválidos. Deben estar en orden ascendente",
+  "code": "INVALID_THRESHOLDS"
+}
+```
+
+### 📊 Casos de Uso del Sistema de Alertas
+
+**1. Dashboard de Monitoreo**
+```bash
+# Ver contadores generales
+curl -X GET http://localhost:3000/alerts/count \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# Ver última alerta crítica
+curl -X GET http://localhost:3000/alerts/latest-critical \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**2. Flujo de Resolución de Alertas**
+```bash
+# 1. Ver alertas pendientes urgentes
+curl -X GET "http://localhost:3000/alerts?status=pendiente&priority=urgente" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# 2. Marcar como "en proceso"
+curl -X PUT http://localhost:3000/alerts/alert_123/status \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{"status": "en_proceso", "notes": "Realizando pedido"}'
+
+# 3. Actualizar stock cuando llega el pedido
+curl -X POST http://localhost:3000/inventory/prod_123/stock \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{"type": "entrada", "quantity": 100, "reason": "Reposición"}'
+
+# 4. Marcar alerta como atendida
+curl -X PUT http://localhost:3000/alerts/alert_123/status \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{"status": "atendido", "notes": "Stock repuesto exitosamente"}'
+```
+
+**3. Verificación Programada**
+```bash
+# Ejecutar verificación diaria (puede usarse en cron job)
+curl -X POST http://localhost:3000/alerts/generate \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+**4. Análisis de Historial**
+```bash
+# Ver métricas del mes
+curl -X GET "http://localhost:3000/alerts/history?month=2025-11" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
 ## 🧪 Testing en servidor de prueba
 
 ```bash
