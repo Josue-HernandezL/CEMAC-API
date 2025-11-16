@@ -29,6 +29,10 @@ API REST con autenticación Firebase y sistema de gestión de inventario.
 - ✅ Disponibilidad limitada e ilimitada
 - ✅ **Código de barras** y **código de proveedor** por producto
 - ✅ Búsqueda por código de barras y código de proveedor
+- ✅ **Gestión por cajas** - Soporte para productos empaquetados (piezas por caja)
+- ✅ **Movimientos mixtos** - Entradas/salidas por cajas o piezas individuales
+- ✅ **Conversión automática** - Cálculo automático entre cajas y piezas
+- ✅ **Compatibilidad total** - Mantiene funcionalidad de productos sin cajas
 
 ### Sistema de Categorías
 - ✅ CRUD completo de categorías de productos
@@ -178,10 +182,10 @@ pnpm start
 - `GET /inventory/:id/history` - Historial de movimientos de stock
 
 #### Escritura (solo administradores)
-- `POST /inventory` - Crear nuevo producto
-- `PUT /inventory/:id` - Actualizar producto
+- `POST /inventory` - Crear nuevo producto (soporta configuración de cajas)
+- `PUT /inventory/:id` - Actualizar producto (incluye gestión de cajas)
 - `DELETE /inventory/:id` - Eliminar producto (soft delete)
-- `POST /inventory/:id/stock` - Actualizar stock (entrada/salida)
+- `POST /inventory/:id/stock` - Actualizar stock (entrada/salida por cajas o piezas)
 
 ### 🏷️ Categorías
 
@@ -612,6 +616,44 @@ curl -X POST http://localhost:3000/inventory \
 - `barcode` - Código de barras del producto
 - `supplierCode` - Código de proveedor
 - `image` - Archivo de imagen (máximo 5MB)
+- `unitsPerBox` - Número de unidades por caja (para productos empaquetados)
+- `boxStock` - Número de cajas en stock
+
+**📦 Gestión por Cajas:**
+
+El sistema soporta productos que vienen en cajas/paquetes. Esto es útil para:
+- Productos que se compran por caja pero se venden por pieza
+- Gestión de inventario de mayoreo
+- Trazabilidad de empaques completos
+
+```bash
+# Crear producto con configuración de cajas
+curl -X POST http://localhost:3000/inventory \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Refresco Cola 355ml",
+    "description": "Refresco de cola en lata",
+    "price": 15.00,
+    "availability": "limited",
+    "category": "Bebidas",
+    "unitsPerBox": 24,
+    "boxStock": 10,
+    "stock": 12
+  }'
+```
+
+En este ejemplo:
+- `unitsPerBox: 24` - Cada caja contiene 24 piezas
+- `boxStock: 10` - Hay 10 cajas completas en almacén
+- `stock: 12` - Hay 12 piezas sueltas adicionales
+- **Stock total:** (10 × 24) + 12 = 252 piezas disponibles
+
+**Notas importantes:**
+- Los campos `unitsPerBox` y `boxStock` son completamente opcionales
+- Los productos sin estos campos funcionan normalmente (modo tradicional)
+- El stock total siempre se calcula como: `(boxStock × unitsPerBox) + piezasSueltas`
+
 
 ### Obtener Producto (GET /inventory/:id)
 
@@ -620,11 +662,44 @@ curl -X GET http://localhost:3000/inventory/1234567890abcdef \
   -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
 ```
 
+**Respuesta:**
+```json
+{
+  "success": true,
+  "product": {
+    "id": "1234567890abcdef",
+    "name": "Refresco Cola 355ml",
+    "description": "Refresco de cola en lata",
+    "price": 15.00,
+    "promotionalPrice": null,
+    "availability": "limited",
+    "category": "Bebidas",
+    "stock": 252,
+    "unitsPerBox": 24,
+    "boxStock": 10,
+    "barcode": "7501234567890",
+    "supplierCode": "PROV-2024-001",
+    "imageUrl": "https://res.cloudinary.com/...",
+    "isActive": true,
+    "createdAt": "2025-11-16T...",
+    "updatedAt": "2025-11-16T...",
+    "createdBy": "admin_uid"
+  },
+  "message": "Producto obtenido exitosamente"
+}
+```
+
+**Notas:**
+- Si el producto tiene `unitsPerBox` y `boxStock`, se incluyen en la respuesta
+- El `stock` es el total calculado: (boxStock × unitsPerBox) + piezas sueltas
+- Productos sin configuración de cajas no tendrán los campos `unitsPerBox` y `boxStock`
+
 ### Actualizar Producto (PUT /inventory/:id)
 
 **⚠️ Solo administradores**
 
 ```bash
+# Actualización básica
 curl -X PUT http://localhost:3000/inventory/1234567890abcdef \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
@@ -635,9 +710,47 @@ curl -X PUT http://localhost:3000/inventory/1234567890abcdef \
     "barcode": "7509876543210",
     "supplierCode": "PROV-2024-002"
   }'
+
+# Agregar configuración de cajas a producto existente
+curl -X PUT http://localhost:3000/inventory/1234567890abcdef \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "unitsPerBox": 24,
+    "boxStock": 15
+  }'
+
+# Cambiar unitsPerBox (recalcula stock automáticamente)
+curl -X PUT http://localhost:3000/inventory/1234567890abcdef \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "unitsPerBox": 12
+  }'
 ```
 
-**Nota:** Todos los campos del producto son opcionales en la actualización, incluyendo `barcode` y `supplierCode`. Solo se actualizan los campos enviados en la solicitud.
+**Respuesta:**
+```json
+{
+  "success": true,
+  "product": {
+    "id": "1234567890abcdef",
+    "name": "Producto Actualizado",
+    "price": 249.99,
+    "unitsPerBox": 24,
+    "boxStock": 15,
+    "stock": 360,
+    "updatedAt": "2025-11-16T..."
+  },
+  "message": "Producto actualizado exitosamente"
+}
+```
+
+**Notas:**
+- Todos los campos son opcionales - solo se actualizan los enviados
+- Al cambiar `unitsPerBox`, el stock total se recalcula automáticamente
+- Puedes agregar configuración de cajas a productos existentes en cualquier momento
+- Para remover la configuración de cajas, envía `unitsPerBox: null` y `boxStock: null`
 
 ### Eliminar Producto (DELETE /inventory/:id)
 
@@ -648,12 +761,26 @@ curl -X DELETE http://localhost:3000/inventory/1234567890abcdef \
   -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
 ```
 
+**Respuesta:**
+```json
+{
+  "success": true,
+  "message": "Producto eliminado exitosamente"
+}
+```
+
+**Notas:**
+- Este es un "soft delete" - el producto se marca como inactivo (`isActive: false`)
+- El producto no aparecerá en los listados pero se conserva en la base de datos
+- El historial de movimientos se mantiene intacto
+- Si la categoría tiene productos, se decrementa el contador `productCount`
+
 ### Actualizar Stock (POST /inventory/:id/stock)
 
 **⚠️ Solo administradores**
 
 ```bash
-# Entrada de stock
+# Entrada de stock (modo tradicional - por piezas)
 curl -X POST http://localhost:3000/inventory/1234567890abcdef/stock \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
@@ -663,7 +790,7 @@ curl -X POST http://localhost:3000/inventory/1234567890abcdef/stock \
     "reason": "Reposición de inventario"
   }'
 
-# Salida de stock
+# Salida de stock (modo tradicional - por piezas)
 curl -X POST http://localhost:3000/inventory/1234567890abcdef/stock \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
@@ -674,10 +801,122 @@ curl -X POST http://localhost:3000/inventory/1234567890abcdef/stock \
   }'
 ```
 
-**Campos requeridos:**
+**📦 Movimientos de Stock por Cajas:**
+
+Para productos con configuración de cajas, puedes hacer movimientos por cajas o por piezas:
+
+```bash
+# Entrada de 5 cajas (se convierten automáticamente a piezas)
+curl -X POST http://localhost:3000/inventory/1234567890abcdef/stock \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "type": "entrada",
+    "unit": "boxes",
+    "boxes": 5,
+    "reason": "Recepción de proveedor"
+  }'
+
+# Salida de 2 cajas
+curl -X POST http://localhost:3000/inventory/1234567890abcdef/stock \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "type": "salida",
+    "unit": "boxes",
+    "boxes": 2,
+    "reason": "Venta mayorista"
+  }'
+
+# Movimiento mixto: salida de 30 piezas (puede tomar de cajas y piezas sueltas)
+curl -X POST http://localhost:3000/inventory/1234567890abcdef/stock \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "type": "salida",
+    "unit": "pieces",
+    "quantity": 30,
+    "reason": "Venta a cliente"
+  }'
+```
+
+**Campos para movimientos:**
+
+**Modo tradicional (piezas):**
 - `type` - `entrada` o `salida`
 - `quantity` - Cantidad (número positivo)
 - `reason` - Motivo del movimiento
+
+**Modo cajas:**
+- `type` - `entrada` o `salida`
+- `unit` - `"boxes"` (indica que es movimiento por cajas)
+- `boxes` - Número de cajas (se convierte automáticamente a piezas)
+- `reason` - Motivo del movimiento
+
+**Modo piezas para productos con cajas:**
+- `type` - `entrada` o `salida`
+- `unit` - `"pieces"` (indica que es movimiento por piezas)
+- `quantity` - Cantidad de piezas
+- `reason` - Motivo del movimiento
+
+**Respuesta ejemplo (movimiento por cajas):**
+```json
+{
+  "success": true,
+  "message": "Stock actualizado exitosamente",
+  "product": {
+    "id": "1234567890abcdef",
+    "name": "Refresco Cola 355ml",
+    "stock": 372,
+    "boxStock": 15,
+    "unitsPerBox": 24,
+    "availability": "limited"
+  },
+  "movement": {
+    "id": "mov_1234567890",
+    "type": "entrada",
+    "quantity": 120,
+    "previousStock": 252,
+    "newStock": 372,
+    "reason": "Entrada: 5 caja(s) = 120 pieza(s) - Recepción de proveedor",
+    "timestamp": "2025-11-16T...",
+    "userId": "admin_uid"
+  }
+}
+```
+
+**Respuesta ejemplo (movimiento por piezas):**
+```json
+{
+  "success": true,
+  "message": "Stock actualizado exitosamente",
+  "product": {
+    "id": "1234567890abcdef",
+    "name": "Refresco Cola 355ml",
+    "stock": 342,
+    "boxStock": 15,
+    "unitsPerBox": 24,
+    "availability": "limited"
+  },
+  "movement": {
+    "id": "mov_1234567891",
+    "type": "salida",
+    "quantity": 30,
+    "previousStock": 372,
+    "newStock": 342,
+    "reason": "Salida: 30 pieza(s) - Venta a cliente",
+    "timestamp": "2025-11-16T...",
+    "userId": "admin_uid"
+  }
+}
+```
+
+**Notas:**
+- Si no se especifica `unit`, se asume movimiento por piezas (modo tradicional)
+- Los movimientos por cajas requieren que el producto tenga `unitsPerBox` configurado
+- El historial registra automáticamente la conversión: "5 caja(s) = 120 pieza(s)"
+- El sistema valida que no haya stock negativo en salidas
+- Para productos con cajas, `boxStock` se actualiza automáticamente
 
 ### Historial de Stock (GET /inventory/:id/history)
 
