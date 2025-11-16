@@ -27,6 +27,18 @@ API REST con autenticación Firebase y sistema de gestión de inventario.
 - ✅ Paginación y ordenamiento
 - ✅ Categorización de productos
 - ✅ Disponibilidad limitada e ilimitada
+- ✅ **Código de barras** y **código de proveedor** por producto
+- ✅ Búsqueda por código de barras y código de proveedor
+
+### Sistema de Categorías
+- ✅ CRUD completo de categorías de productos
+- ✅ Validación de nombres únicos
+- ✅ Búsqueda de categorías por nombre y descripción
+- ✅ Estadísticas detalladas por categoría
+- ✅ **Integración con inventario** - Validación automática al crear/actualizar productos
+- ✅ **Actualización en cascada** - Renombrar categoría actualiza todos los productos
+- ✅ **Contadores automáticos** - productCount se actualiza automáticamente
+- ✅ **Protección de integridad** - No se pueden eliminar categorías con productos
 
 ### Sistema de Ventas
 - ✅ CRUD completo de ventas
@@ -37,6 +49,15 @@ API REST con autenticación Firebase y sistema de gestión de inventario.
 - ✅ Estados de venta (pendiente, completada, cancelada, devuelta)
 - ✅ Reportes y estadísticas de ventas
 - ✅ Integración completa con el sistema de inventario
+
+### Sistema de Clientes
+- ✅ Registro básico de clientes (nombre, apellido, fecha de nacimiento)
+- ✅ Gestión de información personal y notas
+- ✅ Seguimiento completo del historial de compras
+- ✅ Búsqueda avanzada por nombre
+- ✅ Estadísticas automáticas por cliente (total gastado, compras, etc.)
+- ✅ Integración automática con el sistema de ventas
+- ✅ Paginación y filtros en listados
 
 ### Tecnologías
 - ✅ Node.js + Express.js
@@ -159,6 +180,17 @@ pnpm start
 - `DELETE /inventory/:id` - Eliminar producto (soft delete)
 - `POST /inventory/:id/stock` - Actualizar stock (entrada/salida)
 
+### 🏷️ Categorías
+
+#### Lectura (usuarios y administradores)
+- `GET /categories` - Listar todas las categorías
+- `GET /categories/:id/stats` - Obtener estadísticas de una categoría
+
+#### Escritura (solo administradores)
+- `POST /categories` - Crear nueva categoría
+- `PUT /categories/:id` - Actualizar categoría
+- `DELETE /categories/:id` - Eliminar categoría
+
 ### 💰 Ventas
 
 #### Todos los usuarios autenticados
@@ -168,6 +200,15 @@ pnpm start
 - `PUT /sales/:id/status` - Actualizar estado de venta
 - `GET /sales/reports/summary` - Generar reportes de ventas
 - `GET /sales/products/search` - Buscar productos disponibles para venta
+
+### 👥 Clientes
+
+#### Todos los usuarios autenticados
+- `POST /customers` - Registrar nuevo cliente
+- `GET /customers` - Listar clientes con filtros y paginación
+- `GET /customers/search` - Búsqueda rápida de clientes
+- `GET /customers/:id` - Obtener cliente específico con historial de compras
+- `PUT /customers/:id` - Actualizar información del cliente
 
 ## 📡 Uso de la API
 
@@ -469,7 +510,7 @@ curl -X GET "http://localhost:3000/inventory?search=ejemplo&category=electronics
 ```
 
 **Parámetros de consulta disponibles:**
-- `search` - Buscar en nombre y descripción
+- `search` - Buscar en nombre, descripción, código de barras y código de proveedor
 - `category` - Filtrar por categoría
 - `availability` - `limited`, `unlimited`, `out-of-stock`
 - `minPrice` / `maxPrice` - Rango de precios
@@ -491,6 +532,8 @@ curl -X GET "http://localhost:3000/inventory?search=ejemplo&category=electronics
       "availability": "limited",
       "category": "electronics",
       "stock": 50,
+      "barcode": "7501234567890",
+      "supplierCode": "PROV-2024-001",
       "imageUrl": "https://res.cloudinary.com/...",
       "isActive": true,
       "createdAt": "2025-09-24T...",
@@ -533,7 +576,9 @@ curl -X POST http://localhost:3000/inventory \
     "promotionalPrice": 149.99,
     "availability": "limited",
     "category": "electronics",
-    "stock": 25
+    "stock": 25,
+    "barcode": "7501234567890",
+    "supplierCode": "PROV-2024-001"
   }'
 
 # Con imagen (usar multipart/form-data)
@@ -545,6 +590,8 @@ curl -X POST http://localhost:3000/inventory \
   -F "availability=limited" \
   -F "stock=10" \
   -F "category=gadgets" \
+  -F "barcode=7501234567890" \
+  -F "supplierCode=PROV-2024-001" \
   -F "image=@/ruta/a/imagen.jpg"
 ```
 
@@ -558,6 +605,8 @@ curl -X POST http://localhost:3000/inventory \
 - `promotionalPrice` - Precio promocional
 - `category` - Categoría del producto
 - `stock` - Stock inicial (requerido si availability es "limited")
+- `barcode` - Código de barras del producto
+- `supplierCode` - Código de proveedor
 - `image` - Archivo de imagen (máximo 5MB)
 
 ### Obtener Producto (GET /inventory/:id)
@@ -578,9 +627,13 @@ curl -X PUT http://localhost:3000/inventory/1234567890abcdef \
   -d '{
     "name": "Producto Actualizado",
     "price": 249.99,
-    "promotionalPrice": null
+    "promotionalPrice": null,
+    "barcode": "7509876543210",
+    "supplierCode": "PROV-2024-002"
   }'
 ```
+
+**Nota:** Todos los campos del producto son opcionales en la actualización, incluyendo `barcode` y `supplierCode`. Solo se actualizan los campos enviados en la solicitud.
 
 ### Eliminar Producto (DELETE /inventory/:id)
 
@@ -660,6 +713,643 @@ curl -X GET "http://localhost:3000/inventory/1234567890abcdef/history?page=1&lim
     "offset": 0
   },
   "message": "Historial obtenido exitosamente"
+}
+```
+
+### � Ejemplos de Gestión de Clientes
+
+#### Registrar Nuevo Cliente (POST /customers)
+
+```bash
+# Cliente con información completa
+curl -X POST http://localhost:3000/customers \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN" \
+  -d '{
+    "firstName": "María",
+    "lastName": "González",
+    "birthDate": "1985-03-15",
+    "notes": "Cliente frecuente, prefiere productos de calidad"
+  }'
+
+# Cliente con datos mínimos
+curl -X POST http://localhost:3000/customers \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN" \
+  -d '{
+    "firstName": "Carlos",
+    "lastName": "Ruiz"
+  }'
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "message": "Cliente registrado exitosamente",
+  "data": {
+    "id": "customer_1699123456789_abc123def",
+    "firstName": "María",
+    "lastName": "González",
+    "fullName": "María González",
+    "birthDate": "1985-03-15",
+    "notes": "Cliente frecuente, prefiere productos de calidad",
+    "totalPurchases": 0,
+    "totalSpent": 0,
+    "lastPurchaseDate": null,
+    "isActive": true,
+    "createdAt": "2025-11-10T...",
+    "createdBy": "user_uid",
+    "updatedAt": "2025-11-10T..."
+  }
+}
+```
+
+**Campos requeridos:**
+- `firstName` - Nombre del cliente
+- `lastName` - Apellido del cliente
+
+**Campos opcionales:**
+- `birthDate` - Fecha de nacimiento (formato: YYYY-MM-DD)
+- `notes` - Notas adicionales sobre el cliente
+
+#### Listar Clientes (GET /customers)
+
+```bash
+# Listar todos los clientes
+curl -X GET http://localhost:3000/customers \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+
+# Con filtros y paginación
+curl -X GET "http://localhost:3000/customers?search=María&page=1&limit=10&sortBy=totalSpent&sortOrder=desc" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+```
+
+**Parámetros de consulta:**
+- `page` - Número de página (default: 1)
+- `limit` - Elementos por página (default: 10, máx: 50)
+- `search` - Buscar en nombre completo y notas
+- `sortBy` - Ordenar por: `createdAt`, `totalSpent`, `totalPurchases`, `fullName`
+- `sortOrder` - Orden: `asc`, `desc`
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "data": {
+    "customers": [
+      {
+        "id": "customer_1699123456789_abc123def",
+        "firstName": "María",
+        "lastName": "González",
+        "fullName": "María González",
+        "birthDate": "1985-03-15",
+        "notes": "Cliente frecuente, prefiere productos de calidad",
+        "totalPurchases": 5,
+        "totalSpent": 250.75,
+        "lastPurchaseDate": "2025-11-08T...",
+        "isActive": true,
+        "createdAt": "2025-10-15T...",
+        "updatedAt": "2025-11-08T..."
+      }
+    ],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 3,
+      "totalCustomers": 25,
+      "hasNextPage": true,
+      "hasPrevPage": false,
+      "limit": 10,
+      "offset": 0
+    },
+    "stats": {
+      "totalCustomers": 25,
+      "activeCustomers": 25,
+      "totalSpent": 5420.50,
+      "averageSpent": 216.82
+    }
+  },
+  "message": "Se encontraron 25 clientes"
+}
+```
+
+#### Obtener Cliente Específico (GET /customers/:id)
+
+```bash
+curl -X GET http://localhost:3000/customers/customer_1699123456789_abc123def \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "data": {
+    "customer": {
+      "id": "customer_1699123456789_abc123def",
+      "firstName": "María",
+      "lastName": "González",
+      "fullName": "María González",
+      "birthDate": "1985-03-15",
+      "notes": "Cliente frecuente, prefiere productos de calidad",
+      "totalPurchases": 5,
+      "totalSpent": 250.75,
+      "lastPurchaseDate": "2025-11-08T...",
+      "isActive": true,
+      "createdAt": "2025-10-15T...",
+      "updatedAt": "2025-11-08T..."
+    },
+    "purchaseHistory": [
+      {
+        "saleId": "sale_1699456789012_xyz789",
+        "date": "8/11/2025",
+        "total": 85.50,
+        "status": "completada",
+        "products": 3,
+        "paymentMethod": "tarjeta"
+      },
+      {
+        "saleId": "sale_1699123456789_abc456",
+        "date": "5/11/2025",
+        "total": 42.25,
+        "status": "completada",
+        "products": 2,
+        "paymentMethod": "efectivo"
+      }
+    ],
+    "summary": {
+      "totalOrders": 5,
+      "completedOrders": 5,
+      "averageOrderValue": 50.15,
+      "membershipDays": 26,
+      "daysSinceLastPurchase": 2
+    }
+  },
+  "message": "Información del cliente obtenida exitosamente"
+}
+```
+
+#### Búsqueda Rápida de Clientes (GET /customers/search)
+
+```bash
+# Búsqueda básica
+curl -X GET "http://localhost:3000/customers/search?q=María&limit=5" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+
+# Búsqueda por apellido
+curl -X GET "http://localhost:3000/customers/search?q=González" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "customer_1699123456789_abc123def",
+      "fullName": "María González",
+      "firstName": "María",
+      "lastName": "González",
+      "totalPurchases": 5,
+      "totalSpent": 250.75,
+      "lastPurchaseDate": "2025-11-08T..."
+    }
+  ],
+  "message": "Búsqueda completada - 1 resultado(s) encontrado(s)"
+}
+```
+
+#### Actualizar Cliente (PUT /customers/:id)
+
+```bash
+curl -X PUT http://localhost:3000/customers/customer_1699123456789_abc123def \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN" \
+  -d '{
+    "firstName": "María Carmen",
+    "notes": "Cliente VIP - ofrecer descuentos especiales"
+  }'
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "message": "Cliente actualizado exitosamente",
+  "data": {
+    "id": "customer_1699123456789_abc123def",
+    "firstName": "María Carmen",
+    "lastName": "González",
+    "fullName": "María Carmen González",
+    "birthDate": "1985-03-15",
+    "notes": "Cliente VIP - ofrecer descuentos especiales",
+    "totalPurchases": 5,
+    "totalSpent": 250.75,
+    "lastPurchaseDate": "2025-11-08T...",
+    "isActive": true,
+    "createdAt": "2025-10-15T...",
+    "updatedAt": "2025-11-10T..."
+  }
+}
+```
+
+#### Integración Cliente-Ventas
+
+```bash
+# Crear venta asociada a un cliente
+curl -X POST http://localhost:3000/sales \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN" \
+  -d '{
+    "customerId": "customer_1699123456789_abc123def",
+    "products": [
+      {
+        "productId": "product_123",
+        "quantity": 2,
+        "price": 25.00
+      }
+    ],
+    "paymentMethod": "tarjeta",
+    "notes": "Venta asociada al cliente María González"
+  }'
+```
+
+**🎯 Características de la Integración:**
+- ✅ **Asociación automática** del nombre del cliente en la venta
+- ✅ **Actualización automática** de estadísticas del cliente (totalPurchases, totalSpent, lastPurchaseDate)
+- ✅ **Historial completo** de compras disponible en el endpoint del cliente
+- ✅ **Validación** de que el cliente existe y está activo antes de crear la venta
+
+### Validaciones del Sistema de Clientes
+
+#### Errores Comunes
+
+**1. Campos requeridos faltantes:**
+```json
+{
+  "success": false,
+  "message": "Nombre y apellido son obligatorios"
+}
+```
+
+**2. Formato de fecha inválido:**
+```json
+{
+  "success": false,
+  "message": "Formato de fecha inválido. Use YYYY-MM-DD"
+}
+```
+
+**3. Cliente no encontrado:**
+```json
+{
+  "success": false,
+  "message": "Cliente no encontrado"
+}
+```
+
+**4. Cliente inactivo en venta:**
+```json
+{
+  "success": false,
+  "message": "Cliente no encontrado o inactivo"
+}
+```
+
+### 🏷️ Ejemplos de Gestión de Categorías
+
+#### Listar Todas las Categorías (GET /categories)
+
+```bash
+# Listar todas las categorías
+curl -X GET http://localhost:3000/categories \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+
+# Buscar categorías
+curl -X GET "http://localhost:3000/categories?search=electrónica" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "categories": [
+    {
+      "id": "cat_1699123456789_abc",
+      "name": "Electrónica",
+      "description": "Productos electrónicos y tecnología",
+      "productCount": 45,
+      "createdAt": "2025-11-10T...",
+      "updatedAt": "2025-11-10T...",
+      "createdBy": "admin_uid"
+    },
+    {
+      "id": "cat_1699123456789_def",
+      "name": "Papelería",
+      "description": "Artículos de oficina y escolares",
+      "productCount": 128,
+      "createdAt": "2025-11-10T...",
+      "updatedAt": "2025-11-10T...",
+      "createdBy": "admin_uid"
+    }
+  ],
+  "total": 2,
+  "message": "Se encontraron 2 categoría(s)"
+}
+```
+
+**Campos de respuesta:**
+- `id` - ID único de la categoría
+- `name` - Nombre de la categoría
+- `description` - Descripción opcional
+- `productCount` - Número de productos en esta categoría
+- `createdAt` - Fecha de creación
+- `updatedAt` - Fecha de última actualización
+- `createdBy` - ID del usuario que creó la categoría
+
+#### Crear Nueva Categoría (POST /categories)
+
+**⚠️ Solo administradores**
+
+```bash
+# Categoría con descripción
+curl -X POST http://localhost:3000/categories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Tecnología",
+    "description": "Productos tecnológicos y gadgets"
+  }'
+
+# Categoría sin descripción
+curl -X POST http://localhost:3000/categories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Hogar"
+  }'
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "message": "Categoría creada exitosamente",
+  "category": {
+    "id": "cat_1699123456789_xyz",
+    "name": "Tecnología",
+    "description": "Productos tecnológicos y gadgets",
+    "productCount": 0,
+    "createdAt": "2025-11-15T10:30:00Z",
+    "updatedAt": "2025-11-15T10:30:00Z",
+    "createdBy": "admin_uid"
+  }
+}
+```
+
+**Campos requeridos:**
+- `name` - Nombre de la categoría (único)
+
+**Campos opcionales:**
+- `description` - Descripción de la categoría
+
+**Validaciones:**
+- ✅ El nombre es requerido y no puede estar vacío
+- ✅ El nombre debe ser único (case-insensitive)
+- ✅ Solo administradores pueden crear categorías
+
+#### Actualizar Categoría (PUT /categories/:id)
+
+**⚠️ Solo administradores**
+
+```bash
+# Actualizar nombre y descripción
+curl -X PUT http://localhost:3000/categories/cat_1699123456789_xyz \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Tecnología Avanzada",
+    "description": "Productos de tecnología de última generación"
+  }'
+
+# Actualizar solo el nombre
+curl -X PUT http://localhost:3000/categories/cat_1699123456789_xyz \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Tech"
+  }'
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "message": "Categoría actualizada exitosamente",
+  "category": {
+    "id": "cat_1699123456789_xyz",
+    "name": "Tecnología Avanzada",
+    "description": "Productos de tecnología de última generación",
+    "productCount": 15,
+    "createdAt": "2025-11-15T10:30:00Z",
+    "updatedAt": "2025-11-15T11:45:00Z",
+    "createdBy": "admin_uid",
+    "updatedBy": "admin_uid"
+  }
+}
+```
+
+**Características importantes:**
+- ✅ **Actualización en cascada**: Si cambias el nombre, se actualiza automáticamente en todos los productos
+- ✅ Validación de nombre único
+- ✅ Solo administradores pueden actualizar
+- ✅ Todos los campos son opcionales (solo se actualizan los proporcionados)
+
+#### Eliminar Categoría (DELETE /categories/:id)
+
+**⚠️ Solo administradores**
+
+```bash
+curl -X DELETE http://localhost:3000/categories/cat_1699123456789_xyz \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "message": "Categoría eliminada exitosamente",
+  "categoryId": "cat_1699123456789_xyz"
+}
+```
+
+**Error si tiene productos asociados:**
+```json
+{
+  "success": false,
+  "message": "No se puede eliminar la categoría porque tiene 15 producto(s) asociado(s)"
+}
+```
+
+**Validaciones:**
+- ✅ No se puede eliminar una categoría con productos asociados
+- ✅ Solo administradores pueden eliminar
+- ✅ Protección de integridad referencial
+
+#### Obtener Estadísticas de Categoría (GET /categories/:id/stats)
+
+```bash
+curl -X GET http://localhost:3000/categories/cat_1699123456789_xyz/stats \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "category": {
+    "id": "cat_1699123456789_xyz",
+    "name": "Tecnología",
+    "description": "Productos tecnológicos y gadgets",
+    "productCount": 45,
+    "createdAt": "2025-11-15T10:30:00Z",
+    "updatedAt": "2025-11-15T10:30:00Z",
+    "createdBy": "admin_uid"
+  },
+  "stats": {
+    "productCount": 45,
+    "activeProducts": 43,
+    "limitedProducts": 35,
+    "unlimitedProducts": 8,
+    "totalStock": 1250,
+    "lowStockProducts": 5,
+    "averagePrice": 299.99
+  },
+  "message": "Estadísticas obtenidas exitosamente"
+}
+```
+
+**Estadísticas incluidas:**
+- `productCount` - Total de productos en la categoría
+- `activeProducts` - Productos activos (no eliminados)
+- `limitedProducts` - Productos con disponibilidad limitada
+- `unlimitedProducts` - Productos con disponibilidad ilimitada
+- `totalStock` - Stock total de todos los productos
+- `lowStockProducts` - Productos con stock bajo (stock <= minStock)
+- `averagePrice` - Precio promedio de los productos
+
+### Integración de Categorías con Inventario
+
+#### Crear Producto con Categoría Validada
+
+Al crear un producto, **la categoría debe existir previamente**:
+
+```bash
+# 1. Primero crear la categoría
+curl -X POST http://localhost:3000/categories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Electrónica"
+  }'
+
+# 2. Luego crear el producto
+curl -X POST http://localhost:3000/inventory \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Laptop Gaming",
+    "description": "Laptop de alto rendimiento",
+    "price": 1299.99,
+    "availability": "limited",
+    "category": "Electrónica",
+    "stock": 10
+  }'
+```
+
+**Si la categoría no existe:**
+```json
+{
+  "success": false,
+  "message": "La categoría especificada no existe. Por favor, créala primero en /categories"
+}
+```
+
+#### Actualización Automática de Contadores
+
+El sistema actualiza automáticamente el contador `productCount`:
+
+**Al crear un producto:**
+- ➕ Se incrementa `productCount` de la categoría
+
+**Al actualizar la categoría de un producto:**
+- ➖ Se decrementa `productCount` de la categoría anterior
+- ➕ Se incrementa `productCount` de la nueva categoría
+
+**Al eliminar un producto:**
+- ➖ Se decrementa `productCount` de la categoría
+
+#### Renombrar Categoría en Todos los Productos
+
+Cuando actualizas el nombre de una categoría, **todos los productos se actualizan automáticamente**:
+
+```bash
+# Cambiar nombre de "Electrónica" a "Tecnología"
+curl -X PUT http://localhost:3000/categories/cat_123/
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Tecnología"
+  }'
+```
+
+Resultado:
+- ✅ Categoría renombrada
+- ✅ Todos los productos con `category: "Electrónica"` ahora tienen `category: "Tecnología"`
+- ✅ Actualización en cascada automática
+
+### Validaciones del Sistema de Categorías
+
+#### Errores Comunes
+
+**1. Nombre requerido:**
+```json
+{
+  "success": false,
+  "message": "El nombre de la categoría es requerido"
+}
+```
+
+**2. Categoría duplicada:**
+```json
+{
+  "success": false,
+  "message": "Ya existe una categoría con ese nombre"
+}
+```
+
+**3. Categoría no encontrada:**
+```json
+{
+  "success": false,
+  "message": "Categoría no encontrada"
+}
+```
+
+**4. No se puede eliminar con productos:**
+```json
+{
+  "success": false,
+  "message": "No se puede eliminar la categoría porque tiene 45 producto(s) asociado(s)"
+}
+```
+
+**5. Sin permisos de administrador:**
+```json
+{
+  "error": "Acceso denegado. Se requieren permisos de administrador"
 }
 ```
 
@@ -1451,6 +2141,595 @@ curl -X GET http://localhost:3000/analysis/sales \
   -H "Authorization: Bearer YOUR_TOKEN" | jq '.data.topProducts'
 ```
 
+---
+
+## 🚨 Sistema de Alertas
+
+El sistema de alertas permite monitorear el inventario y gestionar notificaciones para eventos críticos como stock bajo, productos agotados y otras situaciones que requieren atención.
+
+### 🔔 Endpoints de Alertas
+
+| Método | Endpoint | Autenticación | Descripción |
+|--------|----------|---------------|-------------|
+| POST | `/alerts/generate` | Admin | Generar alertas automáticas |
+| GET | `/alerts` | User/Admin | Listar con filtros |
+| GET | `/alerts/latest-critical` | User/Admin | Última alerta crítica |
+| GET | `/alerts/count` | User/Admin | Contadores |
+| GET | `/alerts/history` | User/Admin | Historial |
+| GET | `/alerts/:alertId` | User/Admin | Obtener por ID |
+| PUT | `/alerts/mark-all-read` | User/Admin | Marcar todas |
+| PUT | `/alerts/settings/thresholds` | Admin | Configurar umbrales |
+| PUT | `/alerts/:alertId/status` | User/Admin | Actualizar estado |
+| DELETE | `/alerts/:alertId` | Admin | Eliminar alerta |
+
+### 📋 Estructura de Datos de Alertas
+
+```json
+{
+  "id": "alert_1234567890_abc123xyz",
+  "type": "stock_low",
+  "priority": "urgente",
+  "status": "pendiente",
+  "productId": "prod_123",
+  "productName": "Cuaderno Profesional 100 hojas",
+  "productCategory": "Cuadernos y Libretas",
+  "currentStock": 5,
+  "minThreshold": 20,
+  "message": "Stock bajo: Solo quedan 5 unidades de Cuaderno Profesional 100 hojas en Cuadernos y Libretas",
+  "createdAt": "2024-01-15T10:30:00.000Z",
+  "updatedAt": "2024-01-15T14:20:00.000Z",
+  "resolvedAt": null,
+  "resolvedBy": null,
+  "actions": [
+    {
+      "actionType": "status_change",
+      "previousStatus": "pendiente",
+      "newStatus": "en_proceso",
+      "userId": "user_id_123",
+      "userName": "Juan Pérez",
+      "timestamp": "2024-01-15T14:20:00.000Z",
+      "notes": "Pedido realizado al proveedor"
+    }
+  ]
+}
+```
+
+### 🎯 Tipos de Alerta
+
+- **`stock_low`** - Stock por debajo del umbral mínimo
+- **`stock_out`** - Producto completamente agotado (stock = 0)
+- **`expiration`** - Producto próximo a vencer
+- **`price_change`** - Cambio significativo de precio
+- **`other`** - Otras alertas personalizadas
+
+### 🔴 Niveles de Prioridad
+
+- **`critica`** - Stock agotado (0 unidades), requiere atención inmediata
+- **`urgente`** - Stock muy bajo (< 10 unidades)
+- **`media`** - Stock bajo pero dentro de límites manejables
+- **`baja`** - Alertas informativas
+
+### 🔄 Estados de Alerta
+
+- **`pendiente`** - Alerta nueva sin atender
+- **`en_proceso`** - Alguien está trabajando en resolver la alerta
+- **`atendido`** - Alerta solucionada exitosamente
+- **`descartado`** - Alerta ignorada o no relevante
+
+### 📡 Ejemplos de Uso
+
+#### 1. Generar Alertas Automáticas (POST /alerts/generate)
+
+**⚠️ Solo administradores**
+
+```bash
+curl -X POST http://localhost:3000/alerts/generate \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "message": "Alertas generadas exitosamente",
+  "data": {
+    "totalGenerated": 8,
+    "byPriority": {
+      "urgente": 2,
+      "alta": 3,
+      "media": 2,
+      "baja": 1
+    },
+    "alerts": [
+      {
+        "id": "alert_1234567890_abc",
+        "type": "stock_low",
+        "priority": "urgente",
+        "productName": "Cuaderno Profesional",
+        "currentStock": 0,
+        "minThreshold": 20,
+        "message": "Producto agotado: Cuaderno Profesional en Papelería"
+      }
+    ]
+  }
+}
+```
+
+**Características:**
+- ✅ Analiza todo el inventario
+- ✅ Solo productos con `availability: "limited"`
+- ✅ No genera alertas duplicadas
+- ✅ Asigna prioridad automáticamente según umbrales
+
+#### 2. Listar Alertas con Filtros (GET /alerts)
+
+```bash
+# Todas las alertas
+curl -X GET http://localhost:3000/alerts \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# Con filtros
+curl -X GET "http://localhost:3000/alerts?status=pendiente&priority=urgente&page=1&limit=10&sortBy=date&sortOrder=desc" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Parámetros disponibles:**
+- `status` - `pendiente`, `en_proceso`, `atendido`, `descartado`
+- `priority` - `critica`, `urgente`, `media`, `baja`
+- `startDate` / `endDate` - Rango de fechas (YYYY-MM-DD)
+- `page` / `limit` - Paginación (default: 1, 50)
+- `sortBy` - `date`, `priority`, `productName`
+- `sortOrder` - `asc`, `desc`
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "message": "Alertas obtenidas exitosamente",
+  "data": {
+    "alerts": [...],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 3,
+      "totalAlerts": 25,
+      "hasNextPage": true,
+      "hasPrevPage": false,
+      "limit": 10
+    },
+    "summary": {
+      "total": 25,
+      "byStatus": {
+        "pendiente": 10,
+        "en_proceso": 8,
+        "atendido": 5,
+        "descartado": 2
+      },
+      "byPriority": {
+        "urgente": 3,
+        "alta": 8,
+        "media": 10,
+        "baja": 4
+      }
+    }
+  }
+}
+```
+
+#### 3. Obtener Última Alerta Crítica (GET /alerts/latest-critical)
+
+```bash
+curl -X GET http://localhost:3000/alerts/latest-critical \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Respuesta (con alerta):**
+```json
+{
+  "success": true,
+  "data": {
+    "hasAlert": true,
+    "alert": {
+      "id": "alert_1234567890_abc",
+      "type": "stock_low",
+      "priority": "urgente",
+      "status": "pendiente",
+      "productName": "Cuaderno Profesional",
+      "currentStock": 0,
+      "message": "Producto agotado: Cuaderno Profesional en Papelería",
+      "createdAt": "2025-11-10T10:30:00.000Z"
+    }
+  }
+}
+```
+
+**Respuesta (sin alertas):**
+```json
+{
+  "success": true,
+  "data": {
+    "hasAlert": false,
+    "alert": null
+  }
+}
+```
+
+#### 4. Obtener Alerta Específica (GET /alerts/:alertId)
+
+```bash
+curl -X GET http://localhost:3000/alerts/alert_1234567890_abc \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "alert_1234567890_abc",
+    "type": "stock_low",
+    "priority": "urgente",
+    "status": "en_proceso",
+    "productName": "Cuaderno Profesional",
+    "currentStock": 0,
+    "message": "Producto agotado",
+    "createdAt": "2025-11-10T10:30:00.000Z",
+    "updatedAt": "2025-11-10T11:00:00.000Z",
+    "actions": [
+      {
+        "actionType": "status_change",
+        "previousStatus": "pendiente",
+        "newStatus": "en_proceso",
+        "userId": "user_123",
+        "userName": "Juan Pérez",
+        "timestamp": "2025-11-10T11:00:00.000Z",
+        "notes": "Revisando inventario"
+      }
+    ]
+  }
+}
+```
+
+#### 5. Actualizar Estado de Alerta (PUT /alerts/:alertId/status)
+
+```bash
+curl -X PUT http://localhost:3000/alerts/alert_1234567890_abc/status \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "status": "atendido",
+    "notes": "Se realizó pedido al proveedor. Llegará en 3 días."
+  }'
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "message": "Estado de alerta actualizado a: atendido",
+  "data": {
+    "id": "alert_1234567890_abc",
+    "status": "atendido",
+    "resolvedAt": "2025-11-10T12:00:00.000Z",
+    "resolvedBy": "user_123",
+    "lastAction": {
+      "actionType": "status_change",
+      "previousStatus": "en_proceso",
+      "newStatus": "atendido",
+      "userName": "Juan Pérez",
+      "notes": "Se realizó pedido al proveedor. Llegará en 3 días."
+    }
+  }
+}
+```
+
+#### 6. Marcar Todas como Atendidas (PUT /alerts/mark-all-read)
+
+```bash
+# Sin filtros (todas las alertas)
+curl -X PUT http://localhost:3000/alerts/mark-all-read \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{}'
+
+# Con filtros
+curl -X PUT http://localhost:3000/alerts/mark-all-read \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "filters": {
+      "priority": "baja",
+      "status": "pendiente"
+    },
+    "notes": "Revisión masiva de alertas"
+  }'
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "message": "15 alertas marcadas como atendidas",
+  "data": {
+    "totalProcessed": 15,
+    "byPriority": {
+      "urgente": 0,
+      "alta": 2,
+      "media": 5,
+      "baja": 8
+    },
+    "timestamp": "2025-11-10T13:00:00.000Z"
+  }
+}
+```
+
+#### 7. Obtener Contadores (GET /alerts/count)
+
+```bash
+curl -X GET http://localhost:3000/alerts/count \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "data": {
+    "total": 25,
+    "pending": 10,
+    "inProgress": 8,
+    "resolved": 7,
+    "byStatus": {
+      "pendiente": 10,
+      "en_proceso": 8,
+      "atendido": 5,
+      "descartado": 2
+    },
+    "byPriority": {
+      "urgente": 3,
+      "alta": 8,
+      "media": 10,
+      "baja": 4
+    },
+    "criticalAlerts": 11,
+    "lastUpdated": "2025-11-10T13:00:00.000Z"
+  }
+}
+```
+
+#### 8. Configurar Umbrales (PUT /alerts/settings/thresholds)
+
+**⚠️ Solo administradores**
+
+```bash
+curl -X PUT http://localhost:3000/alerts/settings/thresholds \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "stockThresholds": {
+      "urgente": 0,
+      "alta": 5,
+      "media": 15,
+      "baja": 25
+    }
+  }'
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "message": "Umbrales actualizados exitosamente",
+  "data": {
+    "stockThresholds": {
+      "urgente": 0,
+      "alta": 5,
+      "media": 15,
+      "baja": 25
+    },
+    "updatedAt": "2025-11-10T14:00:00.000Z",
+    "updatedBy": "admin_user_id"
+  }
+}
+```
+
+#### 9. Obtener Historial (GET /alerts/history)
+
+```bash
+# Historial general
+curl -X GET http://localhost:3000/alerts/history \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# Filtrado por mes
+curl -X GET "http://localhost:3000/alerts/history?month=2025-11&limit=50" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "data": {
+    "alerts": [
+      {
+        "id": "alert_1234567890_abc",
+        "productName": "Cuaderno Profesional",
+        "priority": "urgente",
+        "finalStatus": "atendido",
+        "createdAt": "2025-11-10T10:30:00.000Z",
+        "resolvedAt": "2025-11-10T12:00:00.000Z",
+        "resolutionTime": 5400000,
+        "resolvedBy": "user_123"
+      }
+    ],
+    "metrics": {
+      "totalResolved": 45,
+      "averageResolutionTime": 7200000,
+      "resolvedByStatus": {
+        "atendido": 38,
+        "descartado": 7
+      },
+      "fastestResolution": 1800000,
+      "slowestResolution": 86400000
+    },
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 1,
+      "total": 45
+    }
+  }
+}
+```
+
+#### 10. Eliminar Alerta (DELETE /alerts/:alertId)
+
+**⚠️ Solo administradores**
+
+```bash
+curl -X DELETE http://localhost:3000/alerts/alert_1234567890_abc \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "message": "Alerta eliminada exitosamente",
+  "data": {
+    "deletedAlertId": "alert_1234567890_abc",
+    "deletedAt": "2025-11-10T15:00:00.000Z",
+    "deletedBy": "admin_user_id"
+  }
+}
+```
+
+### ⚙️ Configuración de Alertas
+
+**Umbrales por defecto:**
+- **Urgente**: 0 unidades (stock agotado)
+- **Alta**: 5 unidades
+- **Media**: 10 unidades
+- **Baja**: 20 unidades
+
+**Script de configuración inicial:**
+```bash
+node backend/scripts/setupAlerts.js
+```
+
+### 🔄 Generación Automática de Alertas
+
+Las alertas se generan automáticamente cuando:
+1. Se actualiza el stock de un producto (`POST /inventory/:id/stock`)
+2. Se ejecuta manualmente (`POST /alerts/generate`)
+
+**Lógica de prioridad automática:**
+```javascript
+if (currentStock === 0) {
+  priority = 'urgente'  // Stock agotado
+} else if (currentStock < 10) {
+  priority = 'alta'     // Stock crítico
+} else {
+  priority = 'media'    // Stock bajo
+}
+```
+
+**Prevención de duplicados:**
+- No se crean alertas duplicadas para el mismo producto
+- Solo se genera una nueva alerta cuando la anterior está resuelta o descartada
+
+### ⚠️ Validaciones de Alertas
+
+**Errores comunes:**
+
+1. **Campo requerido faltante:**
+```json
+{
+  "success": false,
+  "error": "El campo status es requerido",
+  "code": "MISSING_STATUS",
+  "validStatuses": ["pendiente", "en_proceso", "atendido", "descartado"]
+}
+```
+
+2. **Estado inválido:**
+```json
+{
+  "success": false,
+  "error": "Estado inválido",
+  "code": "INVALID_STATUS",
+  "validStatuses": ["pendiente", "en_proceso", "atendido", "descartado"]
+}
+```
+
+3. **Alerta no encontrada:**
+```json
+{
+  "success": false,
+  "error": "Alerta no encontrada",
+  "code": "ALERT_NOT_FOUND"
+}
+```
+
+4. **Umbrales inválidos:**
+```json
+{
+  "success": false,
+  "error": "Valores de umbral inválidos. Deben estar en orden ascendente",
+  "code": "INVALID_THRESHOLDS"
+}
+```
+
+### 📊 Casos de Uso del Sistema de Alertas
+
+**1. Dashboard de Monitoreo**
+```bash
+# Ver contadores generales
+curl -X GET http://localhost:3000/alerts/count \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# Ver última alerta crítica
+curl -X GET http://localhost:3000/alerts/latest-critical \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**2. Flujo de Resolución de Alertas**
+```bash
+# 1. Ver alertas pendientes urgentes
+curl -X GET "http://localhost:3000/alerts?status=pendiente&priority=urgente" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# 2. Marcar como "en proceso"
+curl -X PUT http://localhost:3000/alerts/alert_123/status \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{"status": "en_proceso", "notes": "Realizando pedido"}'
+
+# 3. Actualizar stock cuando llega el pedido
+curl -X POST http://localhost:3000/inventory/prod_123/stock \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{"type": "entrada", "quantity": 100, "reason": "Reposición"}'
+
+# 4. Marcar alerta como atendida
+curl -X PUT http://localhost:3000/alerts/alert_123/status \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{"status": "atendido", "notes": "Stock repuesto exitosamente"}'
+```
+
+**3. Verificación Programada**
+```bash
+# Ejecutar verificación diaria (puede usarse en cron job)
+curl -X POST http://localhost:3000/alerts/generate \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+**4. Análisis de Historial**
+```bash
+# Ver métricas del mes
+curl -X GET "http://localhost:3000/alerts/history?month=2025-11" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
 ## 🧪 Testing en servidor de prueba
 
 ```bash
@@ -1542,12 +2821,37 @@ El sistema implementa un middleware especializado `requireAdminAccess` para prot
 CEMAC-API/
 ├── backend/
 │   ├── controllers/
-│   │   ├── authController.js      # Lógica de autenticación
-│   │   ├── inventoryController.js # Lógica de inventario
-│   │   └── salesController.js     # Lógica de ventas
+│   │   ├── authController.js         # Lógica de autenticación
+│   │   ├── inventoryController.js    # Lógica de inventario
+│   │   ├── categoriesController.js   # Lógica de categorías
+│   │   ├── salesController.js        # Lógica de ventas
+│   │   ├── customersController.js    # Lógica de clientes
+│   │   └── analysisController.js     # Lógica de análisis
 │   ├── middleware/
-│   │   └── auth.js                # Middleware de autenticación + requireAdminAccess
+│   │   └── auth.js                   # Middleware de autenticación + requireAdminAccess
 │   ├── routes/
+│   │   ├── authRoutes.js             # Rutas de autenticación
+│   │   ├── inventoryRoutes.js        # Rutas de inventario
+│   │   ├── categoriesRoutes.js       # Rutas de categorías
+│   │   ├── salesRoutes.js            # Rutas de ventas
+│   │   ├── customersRoutes.js        # Rutas de clientes
+│   │   └── analysisRoutes.js         # Rutas de análisis
+│   └── scripts/
+│       ├── setupDatabase.js          # Configuración inicial
+│       ├── setupInventory.js         # Configuración del módulo de inventario
+│       ├── setupSales.js             # Configuración del módulo de ventas
+│       └── updateAdminPassword.js    # Actualizar contraseña admin
+├── test/
+│   ├── auth.test.js                  # Pruebas de autenticación
+│   ├── inventory.test.js             # Pruebas del inventario
+│   ├── sales.test.js                 # Pruebas del sistema de ventas
+│   └── customers.test.js             # Pruebas del sistema de clientes
+├── .env                              # Variables de entorno
+├── firebaseConfig.js                 # Configuración Firebase
+├── index.js                          # Servidor principal
+├── package.json                      # Dependencias
+└── serviceAccountKey.json            # Credenciales Firebase
+```
 │   │   ├── authRoutes.js          # Rutas de autenticación
 │   │   ├── inventoryRoutes.js     # Rutas de inventario
 │   │   └── salesRoutes.js         # Rutas de ventas

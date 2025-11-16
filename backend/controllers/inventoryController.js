@@ -104,12 +104,14 @@ const getProducts = async (req, res) => {
     // Aplicar filtros
     let filteredProducts = products.filter(product => product.isActive !== false);
 
-    // Filtro por búsqueda en nombre y descripción
+    // Filtro por búsqueda en nombre, descripción, código de barras y código de proveedor
     if (search) {
       const searchTerm = search.toLowerCase();
       filteredProducts = filteredProducts.filter(product => 
         (product.name && product.name.toLowerCase().includes(searchTerm)) ||
-        (product.description && product.description.toLowerCase().includes(searchTerm))
+        (product.description && product.description.toLowerCase().includes(searchTerm)) ||
+        (product.barcode && product.barcode.toLowerCase().includes(searchTerm)) ||
+        (product.supplierCode && product.supplierCode.toLowerCase().includes(searchTerm))
       );
     }
 
@@ -226,7 +228,7 @@ const getProducts = async (req, res) => {
 // POST /inventory - Añadir producto
 const createProduct = async (req, res) => {
   try {
-    const { name, description, price, promotionalPrice, availability, category, stock } = req.body;
+    const { name, description, price, promotionalPrice, availability, category, stock, barcode, supplierCode } = req.body;
     const userId = req.user.uid;
 
     // Validaciones
@@ -249,6 +251,27 @@ const createProduct = async (req, res) => {
         success: false,
         message: 'Para productos limitados, el stock debe ser mayor o igual a 0'
       });
+    }
+
+    // Validar que la categoría exista si se proporciona
+    if (category && category.trim() !== '') {
+      const categoriesRef = db.ref('inventory/categories');
+      const categoriesSnapshot = await categoriesRef.once('value');
+      
+      let categoryExists = false;
+      if (categoriesSnapshot.exists()) {
+        const categories = Object.values(categoriesSnapshot.val());
+        categoryExists = categories.some(cat => 
+          cat.name.toLowerCase() === category.trim().toLowerCase()
+        );
+      }
+
+      if (!categoryExists) {
+        return res.status(400).json({
+          success: false,
+          message: 'La categoría especificada no existe. Por favor, créala primero en /categories'
+        });
+      }
     }
 
     const productId = generateId();
@@ -278,6 +301,8 @@ const createProduct = async (req, res) => {
       availability,
       category: category ? category.trim() : null,
       stock: availability === 'limited' ? parseInt(stock) : null,
+      barcode: barcode ? barcode.trim() : null,
+      supplierCode: supplierCode ? supplierCode.trim() : null,
       imageUrl,
       isActive: true,
       createdAt: new Date().toISOString(),
@@ -288,6 +313,26 @@ const createProduct = async (req, res) => {
     // Guardar producto
     const productRef = db.ref(`inventory/products/${productId}`);
     await productRef.set(product);
+
+    // Actualizar contador de productos en la categoría
+    if (category && category.trim() !== '') {
+      const categoriesRef = db.ref('inventory/categories');
+      const categoriesSnapshot = await categoriesRef.once('value');
+      
+      if (categoriesSnapshot.exists()) {
+        const categories = categoriesSnapshot.val();
+        const categoryEntry = Object.entries(categories).find(([id, cat]) => 
+          cat.name.toLowerCase() === category.trim().toLowerCase()
+        );
+        
+        if (categoryEntry) {
+          const [categoryId, categoryData] = categoryEntry;
+          await db.ref(`inventory/categories/${categoryId}`).update({
+            productCount: (categoryData.productCount || 0) + 1
+          });
+        }
+      }
+    }
 
     // Registrar movimiento de stock inicial si es necesario
     if (availability === 'limited' && parseInt(stock) > 0) {
@@ -354,7 +399,7 @@ const getProductById = async (req, res) => {
 const updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, price, promotionalPrice, availability, category, stock } = req.body;
+    const { name, description, price, promotionalPrice, availability, category, stock, barcode, supplierCode } = req.body;
     const userId = req.user.uid;
 
     // Verificar que el producto existe
@@ -383,6 +428,28 @@ const updateProduct = async (req, res) => {
         success: false,
         message: 'availability debe ser "limited" o "unlimited"'
       });
+    }
+
+    // Validar que la categoría exista si se proporciona y cambió
+    if (category !== undefined && category && category.trim() !== '' && 
+        category.trim() !== currentProduct.category) {
+      const categoriesRef = db.ref('inventory/categories');
+      const categoriesSnapshot = await categoriesRef.once('value');
+      
+      let categoryExists = false;
+      if (categoriesSnapshot.exists()) {
+        const categories = Object.values(categoriesSnapshot.val());
+        categoryExists = categories.some(cat => 
+          cat.name.toLowerCase() === category.trim().toLowerCase()
+        );
+      }
+
+      if (!categoryExists) {
+        return res.status(400).json({
+          success: false,
+          message: 'La categoría especificada no existe. Por favor, créala primero en /categories'
+        });
+      }
     }
 
     let imageUrl = currentProduct.imageUrl;
@@ -420,8 +487,48 @@ const updateProduct = async (req, res) => {
     if (stock !== undefined && availability === 'limited') {
       updatedData.stock = parseInt(stock);
     }
+    if (barcode !== undefined) updatedData.barcode = barcode ? barcode.trim() : null;
+    if (supplierCode !== undefined) updatedData.supplierCode = supplierCode ? supplierCode.trim() : null;
     if (imageUrl !== undefined) {
       updatedData.imageUrl = imageUrl;
+    }
+
+    // Actualizar contadores de categorías si cambió la categoría
+    if (category !== undefined && category !== currentProduct.category) {
+      const categoriesRef = db.ref('inventory/categories');
+      const categoriesSnapshot = await categoriesRef.once('value');
+      
+      if (categoriesSnapshot.exists()) {
+        const categories = categoriesSnapshot.val();
+        
+        // Decrementar contador de categoría anterior
+        if (currentProduct.category) {
+          const oldCategoryEntry = Object.entries(categories).find(([id, cat]) => 
+            cat.name.toLowerCase() === currentProduct.category.toLowerCase()
+          );
+          
+          if (oldCategoryEntry) {
+            const [oldCategoryId, oldCategoryData] = oldCategoryEntry;
+            await db.ref(`inventory/categories/${oldCategoryId}`).update({
+              productCount: Math.max((oldCategoryData.productCount || 1) - 1, 0)
+            });
+          }
+        }
+        
+        // Incrementar contador de nueva categoría
+        if (category && category.trim() !== '') {
+          const newCategoryEntry = Object.entries(categories).find(([id, cat]) => 
+            cat.name.toLowerCase() === category.trim().toLowerCase()
+          );
+          
+          if (newCategoryEntry) {
+            const [newCategoryId, newCategoryData] = newCategoryEntry;
+            await db.ref(`inventory/categories/${newCategoryId}`).update({
+              productCount: (newCategoryData.productCount || 0) + 1
+            });
+          }
+        }
+      }
     }
 
     // Actualizar producto
@@ -478,6 +585,26 @@ const deleteProduct = async (req, res) => {
     };
 
     await productRef.set(updatedProduct);
+
+    // Decrementar contador de categoría
+    if (product.category) {
+      const categoriesRef = db.ref('inventory/categories');
+      const categoriesSnapshot = await categoriesRef.once('value');
+      
+      if (categoriesSnapshot.exists()) {
+        const categories = categoriesSnapshot.val();
+        const categoryEntry = Object.entries(categories).find(([id, cat]) => 
+          cat.name.toLowerCase() === product.category.toLowerCase()
+        );
+        
+        if (categoryEntry) {
+          const [categoryId, categoryData] = categoryEntry;
+          await db.ref(`inventory/categories/${categoryId}`).update({
+            productCount: Math.max((categoryData.productCount || 1) - 1, 0)
+          });
+        }
+      }
+    }
 
     res.status(200).json({
       success: true,

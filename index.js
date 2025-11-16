@@ -10,6 +10,9 @@ const authRoutes = require('./backend/routes/authRoutes');
 const inventoryRoutes = require('./backend/routes/inventoryRoutes');
 const salesRoutes = require('./backend/routes/salesRoutes');
 const analysisRoutes = require('./backend/routes/analysisRoutes');
+const customersRoutes = require('./backend/routes/customersRoutes');
+const categoriesRoutes = require('./backend/routes/categoriesRoutes');
+const alertsRoutes = require('./backend/routes/alertsRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -37,6 +40,9 @@ app.use('/auth', authRoutes);
 app.use('/inventory', inventoryRoutes);
 app.use('/sales', salesRoutes);
 app.use('/analysis', analysisRoutes);
+app.use('/customers', customersRoutes);
+app.use('/categories', categoriesRoutes);
+app.use('/alerts', alertsRoutes);
 
 // Ruta de prueba
 app.get('/', (req, res) => {
