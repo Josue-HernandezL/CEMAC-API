@@ -49,6 +49,9 @@ API REST con autenticación Firebase y sistema de gestión de inventario.
 - ✅ Estados de venta (pendiente, completada, cancelada, devuelta)
 - ✅ Reportes y estadísticas de ventas
 - ✅ Integración completa con el sistema de inventario
+- ✅ **Integración de vendedores** - Sistema vinculado con usuarios registrados
+- ✅ **Validación de vendedores** - Verificación automática de usuarios activos
+- ✅ **Trazabilidad de ventas** - Seguimiento por vendedor con UID del usuario
 
 ### Sistema de Clientes
 - ✅ Registro básico de clientes (nombre, apellido, fecha de nacimiento)
@@ -200,6 +203,7 @@ pnpm start
 - `PUT /sales/:id/status` - Actualizar estado de venta
 - `GET /sales/reports/summary` - Generar reportes de ventas
 - `GET /sales/products/search` - Buscar productos disponibles para venta
+- `GET /sales/users/vendedores` - Obtener lista de vendedores (usuarios del sistema)
 
 ### 👥 Clientes
 
@@ -1355,6 +1359,55 @@ Resultado:
 
 ### 💰 Ejemplos de Ventas
 
+#### Obtener Lista de Vendedores (GET /sales/users/vendedores)
+
+**Descripción:** Obtiene la lista de usuarios registrados en el sistema que pueden actuar como vendedores.
+
+```bash
+# Obtener todos los vendedores activos
+curl -X GET http://localhost:3000/sales/users/vendedores \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+
+# Incluir vendedores inactivos
+curl -X GET "http://localhost:3000/sales/users/vendedores?includeInactive=true" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "vendedores": [
+    {
+      "uid": "user_abc123xyz",
+      "email": "juan.perez@empresa.com",
+      "firstName": "Juan",
+      "lastName": "Pérez",
+      "fullName": "Juan Pérez",
+      "role": "user",
+      "isActive": true
+    },
+    {
+      "uid": "user_def456uvw",
+      "email": "maria.garcia@empresa.com",
+      "firstName": "María",
+      "lastName": "García",
+      "fullName": "María García",
+      "role": "admin",
+      "isActive": true
+    }
+  ],
+  "total": 2,
+  "message": "Se encontraron 2 vendedores"
+}
+```
+
+**Características:**
+- ✅ Retorna solo usuarios activos por defecto
+- ✅ Incluye información completa del usuario
+- ✅ Ordenados alfabéticamente por nombre
+- ✅ Útil para poblar dropdown/select en formularios de venta
+
 #### Crear Nueva Venta (POST /sales)
 
 **Ejemplo 1: Venta sin IVA (precios ya incluyen impuestos)**
@@ -1364,7 +1417,7 @@ curl -X POST http://localhost:3000/sales \
   -H "Authorization: Bearer YOUR_FIREBASE_TOKEN" \
   -d '{
     "cliente": "Juan Pérez",
-    "vendedor": "María García",
+    "vendedorId": "user_abc123xyz",
     "descuento": 10,
     "products": [
       {
@@ -1390,7 +1443,7 @@ curl -X POST http://localhost:3000/sales \
   -H "Authorization: Bearer YOUR_FIREBASE_TOKEN" \
   -d '{
     "cliente": "María González",
-    "vendedor": "Carlos López",
+    "vendedorId": "user_def456uvw",
     "descuento": 5,
     "iva": 16,
     "products": [
@@ -1405,14 +1458,13 @@ curl -X POST http://localhost:3000/sales \
   }'
 ```
 
-**Ejemplo 3: Venta sin descuento y sin IVA**
+**Ejemplo 3: Venta sin vendedor asignado**
 ```bash
 curl -X POST http://localhost:3000/sales \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_FIREBASE_TOKEN" \
   -d '{
     "cliente": "Ana Rodríguez",
-    "vendedor": "Luis Martín",
     "products": [
       {
         "productId": "1234567890abcdef",
@@ -1431,7 +1483,9 @@ curl -X POST http://localhost:3000/sales \
   "sale": {
     "id": "sale_1234567890",
     "cliente": "Juan Pérez",
-    "vendedor": "María García",
+    "vendedorId": "user_abc123xyz",
+    "vendedor": "Juan Pérez",
+    "vendedorEmail": "juan.perez@empresa.com",
     "products": [
       {
         "productId": "1234567890abcdef",
@@ -1475,7 +1529,9 @@ curl -X POST http://localhost:3000/sales \
   "sale": {
     "id": "sale_2345678901",
     "cliente": "María González",
-    "vendedor": "Carlos López",
+    "vendedorId": "user_def456uvw",
+    "vendedor": "María García",
+    "vendedorEmail": "maria.garcia@empresa.com",
     "products": [
       {
         "productId": "1234567890abcdef",
@@ -1512,11 +1568,43 @@ curl -X POST http://localhost:3000/sales \
 
 **Campos opcionales:**
 - `cliente` - Nombre del cliente (default: "Cliente General")
-- `vendedor` - Nombre del vendedor (default: "No asignado")
+- `vendedorId` - UID del usuario vendedor del sistema (default: null, aparecerá como "No asignado")
 - `descuento` - Porcentaje de descuento (0-100, default: 0)
 - `iva` - Porcentaje de IVA a aplicar (0-100, default: 0)
 - `paymentMethod` - Método de pago (default: "efectivo")
 - `notes` - Notas adicionales
+
+**🎯 Integración con Sistema de Vendedores:**
+
+1. **Obtener lista de vendedores disponibles:**
+```bash
+GET /sales/users/vendedores
+```
+
+2. **Crear venta con vendedor asignado:**
+```bash
+POST /sales
+{
+  "vendedorId": "user_abc123xyz",  // UID del usuario
+  "cliente": "Cliente",
+  "products": [...]
+}
+```
+
+3. **Validaciones automáticas:**
+- ✅ El sistema valida que el `vendedorId` exista
+- ✅ Verifica que el vendedor esté activo (`isActive: true`)
+- ✅ Obtiene automáticamente nombre completo y email del vendedor
+- ✅ Si no se proporciona `vendedorId`, se registra como "No asignado"
+
+**Respuestas de error:**
+```json
+// Vendedor no encontrado o inactivo
+{
+  "success": false,
+  "message": "Vendedor no encontrado o inactivo"
+}
+```
 
 **💡 Importante sobre IVA y Descuentos:**
 - **Sin IVA (default)**: Si no envías el campo `iva` o lo envías como `0`, se asume que los precios ya incluyen todos los impuestos
@@ -1575,18 +1663,30 @@ curl -X GET http://localhost:3000/sales \
   -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
 
 # Con filtros
-curl -X GET "http://localhost:3000/sales?startDate=2025-09-01&endDate=2025-09-30&vendedor=María&page=1&limit=10&sortBy=total&sortOrder=desc" \
+curl -X GET "http://localhost:3000/sales?startDate=2025-09-01&endDate=2025-09-30&vendedor=user_abc123xyz&page=1&limit=10&sortBy=total&sortOrder=desc" \
   -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
 ```
 
 **Parámetros de consulta disponibles:**
 - `page` / `limit` - Paginación
 - `startDate` / `endDate` - Filtro por rango de fechas (YYYY-MM-DD)
-- `vendedor` - Filtrar por nombre del vendedor
+- `vendedor` - Filtrar por **UID del vendedor**, **email** o **nombre**
 - `cliente` - Filtrar por nombre del cliente
 - `status` - Filtrar por estado (pendiente, completada, cancelada, devuelta)
 - `sortBy` - Ordenar por campo (createdAt, total, cliente, vendedor)
 - `sortOrder` - Orden (asc, desc)
+
+**🎯 Filtrado Flexible por Vendedor:**
+```bash
+# Por UID del usuario
+GET /sales?vendedor=user_abc123xyz
+
+# Por email del vendedor
+GET /sales?vendedor=juan.perez@empresa.com
+
+# Por nombre del vendedor
+GET /sales?vendedor=Juan
+```
 
 **Respuesta:**
 ```json
@@ -1596,7 +1696,9 @@ curl -X GET "http://localhost:3000/sales?startDate=2025-09-01&endDate=2025-09-30
     {
       "id": "sale_1234567890",
       "cliente": "Juan Pérez",
-      "vendedor": "María García",
+      "vendedorId": "user_abc123xyz",
+      "vendedor": "Juan Pérez",
+      "vendedorEmail": "juan.perez@empresa.com",
       "products": [...],
       "subtotal": 314.97,
       "total": 324.78,
@@ -1720,7 +1822,7 @@ curl -X GET http://localhost:3000/sales/reports/summary \
   -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
 
 # Reporte con filtros
-curl -X GET "http://localhost:3000/sales/reports/summary?startDate=2025-09-01&endDate=2025-09-30&vendedor=María" \
+curl -X GET "http://localhost:3000/sales/reports/summary?startDate=2025-09-01&endDate=2025-09-30&vendedor=user_abc123xyz" \
   -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
 ```
 
@@ -1748,20 +1850,37 @@ curl -X GET "http://localhost:3000/sales/reports/summary?startDate=2025-09-01&en
     ],
     "salesByVendedor": [
       {
-        "vendedor": "María García",
+        "vendedorId": "user_abc123xyz",
+        "vendedor": "Juan Pérez",
+        "vendedorEmail": "juan.perez@empresa.com",
         "totalSales": 23,
         "totalRevenue": 7420.50
       },
       {
-        "vendedor": "Carlos López",
+        "vendedorId": "user_def456uvw",
+        "vendedor": "María García",
+        "vendedorEmail": "maria.garcia@empresa.com",
         "totalSales": 18,
         "totalRevenue": 5827.80
+      },
+      {
+        "vendedorId": null,
+        "vendedor": "No asignado",
+        "vendedorEmail": null,
+        "totalSales": 6,
+        "totalRevenue": 2000.00
       }
     ]
   },
   "message": "Reporte generado exitosamente"
 }
 ```
+
+**🎯 Características del Reporte de Vendedores:**
+- ✅ Incluye información completa del vendedor (UID, nombre, email)
+- ✅ Agrupa ventas por vendedor específico
+- ✅ Separa ventas sin vendedor asignado
+- ✅ Ordenado por ingresos totales (mayor a menor)
 
 ### ⚠️ Validaciones y Errores Comunes de Ventas
 

@@ -116,7 +116,7 @@ const createSale = async (req, res) => {
     const { 
       cliente, 
       customerId,
-      vendedor, 
+      vendedorId, // UID del usuario vendedor
       descuento = 0, 
       products,
       paymentMethod = 'efectivo',
@@ -131,6 +131,20 @@ const createSale = async (req, res) => {
         success: false,
         message: 'Debe incluir al menos un producto en la venta'
       });
+    }
+
+    // Validar y obtener información del vendedor
+    let vendedorData = null;
+    if (vendedorId) {
+      const vendedorSnapshot = await db.ref(`users/${vendedorId}`).once('value');
+      vendedorData = vendedorSnapshot.val();
+      
+      if (!vendedorData || vendedorData.isActive === false) {
+        return res.status(400).json({
+          success: false,
+          message: 'Vendedor no encontrado o inactivo'
+        });
+      }
     }
 
     if (descuento < 0 || descuento > 100) {
@@ -179,7 +193,9 @@ const createSale = async (req, res) => {
       id: saleId,
       cliente: cliente ? cliente.trim() : (customerData ? customerData.fullName : 'Cliente General'),
       customerId: customerId || null,
-      vendedor: vendedor ? vendedor.trim() : 'No asignado',
+      vendedorId: vendedorId || null,
+      vendedor: vendedorData ? `${vendedorData.firstName || ''} ${vendedorData.lastName || ''}`.trim() || vendedorData.email : 'No asignado',
+      vendedorEmail: vendedorData ? vendedorData.email : null,
       products: validatedProducts,
       subtotal: parseFloat(subtotal.toFixed(2)),
       descuento: parseFloat(descuento),
@@ -275,11 +291,18 @@ const getSales = async (req, res) => {
       );
     }
 
-    // Filtro por vendedor
+    // Filtro por vendedor (por nombre o por ID)
     if (vendedor) {
-      filteredSales = filteredSales.filter(sale => 
-        sale.vendedor && sale.vendedor.toLowerCase().includes(vendedor.toLowerCase())
-      );
+      filteredSales = filteredSales.filter(sale => {
+        // Buscar por nombre
+        const matchName = sale.vendedor && sale.vendedor.toLowerCase().includes(vendedor.toLowerCase());
+        // Buscar por email
+        const matchEmail = sale.vendedorEmail && sale.vendedorEmail.toLowerCase().includes(vendedor.toLowerCase());
+        // Buscar por ID exacto
+        const matchId = sale.vendedorId === vendedor;
+        
+        return matchName || matchEmail || matchId;
+      });
     }
 
     // Filtro por cliente
@@ -452,6 +475,65 @@ const updateSaleStatus = async (req, res) => {
   }
 };
 
+// GET /sales/users/vendedores - Obtener lista de vendedores (usuarios del sistema)
+const getVendedores = async (req, res) => {
+  try {
+    const { includeInactive = false } = req.query;
+
+    // Obtener todos los usuarios del sistema
+    const usersRef = db.ref('users');
+    const snapshot = await usersRef.once('value');
+    let users = [];
+
+    if (snapshot.exists()) {
+      const usersData = snapshot.val();
+      users = Object.entries(usersData).map(([uid, userData]) => ({
+        uid,
+        ...userData
+      }));
+    }
+
+    // Filtrar usuarios activos si se requiere
+    let vendedores = users;
+    if (!includeInactive || includeInactive === 'false') {
+      vendedores = vendedores.filter(user => user.isActive !== false);
+    }
+
+    // Formatear respuesta para la interfaz de ventas
+    const formattedVendedores = vendedores.map(user => ({
+      uid: user.uid,
+      email: user.email,
+      firstName: user.firstName || '',
+      lastName: user.lastName || '',
+      fullName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+      role: user.role,
+      isActive: user.isActive !== false
+    }));
+
+    // Ordenar por nombre
+    formattedVendedores.sort((a, b) => {
+      const nameA = a.fullName.toLowerCase();
+      const nameB = b.fullName.toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+
+    res.status(200).json({
+      success: true,
+      vendedores: formattedVendedores,
+      total: formattedVendedores.length,
+      message: `Se encontraron ${formattedVendedores.length} vendedores`
+    });
+
+  } catch (error) {
+    console.error('Error al obtener vendedores:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor',
+      error: error.message
+    });
+  }
+};
+
 // GET /sales/products/search - Buscar productos disponibles para venta
 const searchAvailableProducts = async (req, res) => {
   try {
@@ -601,16 +683,21 @@ const getSalesReport = async (req, res) => {
     // Ventas por vendedor
     const salesByVendedor = {};
     sales.forEach(sale => {
-      const vendedor = sale.vendedor || 'No asignado';
-      if (!salesByVendedor[vendedor]) {
-        salesByVendedor[vendedor] = {
-          vendedor,
+      const vendedorKey = sale.vendedorId || 'sin-asignar';
+      const vendedorName = sale.vendedor || 'No asignado';
+      const vendedorEmail = sale.vendedorEmail || null;
+      
+      if (!salesByVendedor[vendedorKey]) {
+        salesByVendedor[vendedorKey] = {
+          vendedorId: sale.vendedorId || null,
+          vendedor: vendedorName,
+          vendedorEmail: vendedorEmail,
           totalSales: 0,
           totalRevenue: 0
         };
       }
-      salesByVendedor[vendedor].totalSales += 1;
-      salesByVendedor[vendedor].totalRevenue += sale.total;
+      salesByVendedor[vendedorKey].totalSales += 1;
+      salesByVendedor[vendedorKey].totalRevenue += sale.total;
     });
 
     const topVendedores = Object.values(salesByVendedor)
@@ -650,5 +737,6 @@ module.exports = {
   getSaleById,
   updateSaleStatus,
   getSalesReport,
-  searchAvailableProducts
+  searchAvailableProducts,
+  getVendedores
 };

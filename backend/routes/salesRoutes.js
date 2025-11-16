@@ -6,7 +6,8 @@ const {
   getSaleById, 
   updateSaleStatus, 
   getSalesReport,
-  searchAvailableProducts 
+  searchAvailableProducts,
+  getVendedores
 } = require('../controllers/salesController');
 const { authenticateUser } = require('../middleware/auth');
 
@@ -15,6 +16,9 @@ router.post('/', authenticateUser, createSale);
 
 // GET /sales - Listar ventas con filtros y paginación
 router.get('/', authenticateUser, getSales);
+
+// GET /sales/users/vendedores - Obtener lista de vendedores (usuarios del sistema)
+router.get('/users/vendedores', authenticateUser, getVendedores);
 
 // GET /sales/products/search - Buscar productos disponibles para venta (debe ir antes de /:id)
 router.get('/products/search', authenticateUser, searchAvailableProducts);
