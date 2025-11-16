@@ -228,7 +228,20 @@ const getProducts = async (req, res) => {
 // POST /inventory - Añadir producto
 const createProduct = async (req, res) => {
   try {
-    const { name, description, price, promotionalPrice, availability, category, stock, barcode, supplierCode } = req.body;
+    const { 
+      name, 
+      description, 
+      price, 
+      promotionalPrice, 
+      availability, 
+      category, 
+      stock, 
+      barcode, 
+      supplierCode,
+      // Nuevos campos para manejo de cajas
+      unitsPerBox,
+      boxStock
+    } = req.body;
     const userId = req.user.uid;
 
     // Validaciones
@@ -246,7 +259,34 @@ const createProduct = async (req, res) => {
       });
     }
 
-    if (availability === 'limited' && (!stock || stock < 0)) {
+    // Validación de unidades por caja
+    if (unitsPerBox !== undefined && unitsPerBox !== null) {
+      const unitsNum = parseInt(unitsPerBox);
+      if (isNaN(unitsNum) || unitsNum <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'unitsPerBox debe ser un número mayor a 0'
+        });
+      }
+    }
+
+    // Calcular stock en piezas si se proporcionan cajas
+    let finalStock = stock ? parseInt(stock) : 0;
+    let finalBoxStock = null;
+    let finalUnitsPerBox = null;
+
+    if (unitsPerBox && parseInt(unitsPerBox) > 0) {
+      finalUnitsPerBox = parseInt(unitsPerBox);
+      
+      if (boxStock && parseInt(boxStock) >= 0) {
+        // Si se proporciona boxStock, calcular piezas totales
+        finalBoxStock = parseInt(boxStock);
+        const piecesFromBoxes = finalBoxStock * finalUnitsPerBox;
+        finalStock = piecesFromBoxes + (stock ? parseInt(stock) : 0);
+      }
+    }
+
+    if (availability === 'limited' && finalStock < 0) {
       return res.status(400).json({
         success: false,
         message: 'Para productos limitados, el stock debe ser mayor o igual a 0'
@@ -300,9 +340,12 @@ const createProduct = async (req, res) => {
       promotionalPrice: promotionalPrice ? parseFloat(promotionalPrice) : null,
       availability,
       category: category ? category.trim() : null,
-      stock: availability === 'limited' ? parseInt(stock) : null,
+      stock: availability === 'limited' ? finalStock : null,
       barcode: barcode ? barcode.trim() : null,
       supplierCode: supplierCode ? supplierCode.trim() : null,
+      // Campos de cajas (opcionales)
+      unitsPerBox: finalUnitsPerBox,
+      boxStock: finalBoxStock,
       imageUrl,
       isActive: true,
       createdAt: new Date().toISOString(),
@@ -335,8 +378,11 @@ const createProduct = async (req, res) => {
     }
 
     // Registrar movimiento de stock inicial si es necesario
-    if (availability === 'limited' && parseInt(stock) > 0) {
-      await logStockMovement(productId, 'entrada', stock, 'Stock inicial', userId);
+    if (availability === 'limited' && finalStock > 0) {
+      const movementReason = finalBoxStock 
+        ? `Stock inicial: ${finalBoxStock} cajas (${finalBoxStock * finalUnitsPerBox} piezas) + ${stock || 0} piezas sueltas`
+        : 'Stock inicial';
+      await logStockMovement(productId, 'entrada', finalStock, movementReason, userId);
     }
 
     res.status(201).json({
@@ -399,7 +445,20 @@ const getProductById = async (req, res) => {
 const updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, price, promotionalPrice, availability, category, stock, barcode, supplierCode } = req.body;
+    const { 
+      name, 
+      description, 
+      price, 
+      promotionalPrice, 
+      availability, 
+      category, 
+      stock, 
+      barcode, 
+      supplierCode,
+      // Campos de cajas
+      unitsPerBox,
+      boxStock
+    } = req.body;
     const userId = req.user.uid;
 
     // Verificar que el producto existe
@@ -484,9 +543,31 @@ const updateProduct = async (req, res) => {
     }
     if (availability !== undefined) updatedData.availability = availability;
     if (category !== undefined) updatedData.category = category ? category.trim() : null;
-    if (stock !== undefined && availability === 'limited') {
-      updatedData.stock = parseInt(stock);
+    
+    // Manejo de cajas y stock
+    if (unitsPerBox !== undefined) {
+      updatedData.unitsPerBox = unitsPerBox ? parseInt(unitsPerBox) : null;
     }
+    
+    if (boxStock !== undefined) {
+      updatedData.boxStock = boxStock !== null ? parseInt(boxStock) : null;
+    }
+    
+    // Actualizar stock: si se proporciona stock en piezas o en cajas
+    if (stock !== undefined || boxStock !== undefined || unitsPerBox !== undefined) {
+      const currentUnitsPerBox = updatedData.unitsPerBox || currentProduct.unitsPerBox;
+      const currentBoxStock = boxStock !== undefined ? parseInt(boxStock) : (updatedData.boxStock || currentProduct.boxStock || 0);
+      const currentPieceStock = stock !== undefined ? parseInt(stock) : (currentProduct.stock || 0);
+      
+      if (currentUnitsPerBox && currentUnitsPerBox > 0) {
+        // Calcular stock total: cajas convertidas a piezas + piezas sueltas
+        const piecesFromBoxes = currentBoxStock * currentUnitsPerBox;
+        updatedData.stock = piecesFromBoxes + (stock !== undefined ? parseInt(stock) : 0);
+      } else if (stock !== undefined && availability === 'limited') {
+        updatedData.stock = parseInt(stock);
+      }
+    }
+    
     if (barcode !== undefined) updatedData.barcode = barcode ? barcode.trim() : null;
     if (supplierCode !== undefined) updatedData.supplierCode = supplierCode ? supplierCode.trim() : null;
     if (imageUrl !== undefined) {
@@ -626,14 +707,21 @@ const deleteProduct = async (req, res) => {
 const updateStock = async (req, res) => {
   try {
     const { id } = req.params;
-    const { type, quantity, reason } = req.body;
+    const { 
+      type, 
+      quantity, 
+      reason,
+      // Nuevos campos para movimientos por cajas
+      boxes,
+      unit = 'pieces' // 'pieces' o 'boxes'
+    } = req.body;
     const userId = req.user.uid;
 
     // Validaciones
-    if (!type || !quantity || !reason) {
+    if (!type || (!quantity && !boxes) || !reason) {
       return res.status(400).json({
         success: false,
-        message: 'Faltan campos requeridos: type, quantity, reason'
+        message: 'Faltan campos requeridos: type, (quantity o boxes), reason'
       });
     }
 
@@ -644,11 +732,10 @@ const updateStock = async (req, res) => {
       });
     }
 
-    const quantityNum = parseInt(quantity);
-    if (quantityNum <= 0) {
+    if (!['pieces', 'boxes'].includes(unit)) {
       return res.status(400).json({
         success: false,
-        message: 'La cantidad debe ser mayor a 0'
+        message: 'unit debe ser "pieces" o "boxes"'
       });
     }
 
@@ -679,35 +766,93 @@ const updateStock = async (req, res) => {
       });
     }
 
-    // Calcular nuevo stock
+    // Determinar la cantidad en piezas según la unidad
+    let quantityInPieces;
+    let movementDescription;
+    
+    if (unit === 'boxes') {
+      if (!product.unitsPerBox || product.unitsPerBox <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Este producto no tiene configurado unitsPerBox para manejar cajas'
+        });
+      }
+      
+      const boxesNum = boxes ? parseInt(boxes) : parseInt(quantity);
+      if (boxesNum <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'La cantidad de cajas debe ser mayor a 0'
+        });
+      }
+      
+      quantityInPieces = boxesNum * product.unitsPerBox;
+      movementDescription = `${boxesNum} caja(s) = ${quantityInPieces} pieza(s)`;
+      
+      // Actualizar boxStock si existe
+      if (product.boxStock !== null && product.boxStock !== undefined) {
+        const newBoxStock = type === 'entrada' 
+          ? (product.boxStock || 0) + boxesNum
+          : (product.boxStock || 0) - boxesNum;
+          
+        if (newBoxStock < 0) {
+          return res.status(400).json({
+            success: false,
+            message: `Stock de cajas insuficiente. Cajas actuales: ${product.boxStock || 0}`
+          });
+        }
+      }
+    } else {
+      // unit === 'pieces'
+      const quantityNum = parseInt(quantity);
+      if (quantityNum <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'La cantidad debe ser mayor a 0'
+        });
+      }
+      quantityInPieces = quantityNum;
+      movementDescription = `${quantityNum} pieza(s)`;
+    }
+
+    // Calcular nuevo stock en piezas
     let newStock = product.stock || 0;
     
     if (type === 'entrada') {
-      newStock += quantityNum;
+      newStock += quantityInPieces;
     } else {
-      newStock -= quantityNum;
+      newStock -= quantityInPieces;
       
       // Verificar que no quede en negativo
       if (newStock < 0) {
         return res.status(400).json({
           success: false,
-          message: `Stock insuficiente. Stock actual: ${product.stock}`
+          message: `Stock insuficiente. Stock actual: ${product.stock} pieza(s)`
         });
       }
     }
 
-    // Actualizar stock del producto
+    // Actualizar stock del producto y boxStock si aplica
     const updatedProduct = {
       ...product,
       stock: newStock,
       updatedAt: new Date().toISOString(),
       updatedBy: userId
     };
+    
+    // Actualizar boxStock si se movieron cajas
+    if (unit === 'boxes' && product.boxStock !== null && product.boxStock !== undefined) {
+      const boxesNum = boxes ? parseInt(boxes) : parseInt(quantity);
+      updatedProduct.boxStock = type === 'entrada'
+        ? (product.boxStock || 0) + boxesNum
+        : (product.boxStock || 0) - boxesNum;
+    }
 
     await productRef.set(updatedProduct);
 
-    // Registrar movimiento
-    const movement = await logStockMovement(id, type, quantityNum, reason, userId);
+    // Registrar movimiento con descripción mejorada
+    const fullReason = `${reason} (${movementDescription})`;
+    const movement = await logStockMovement(id, type, quantityInPieces, fullReason, userId);
 
     res.status(200).json({
       success: true,
