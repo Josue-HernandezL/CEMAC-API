@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+const http = require('http');
+const { Server } = require('socket.io');
 require('dotenv').config();
 
 // Importar Firebase config
@@ -15,7 +17,18 @@ const categoriesRoutes = require('./backend/routes/categoriesRoutes');
 const alertsRoutes = require('./backend/routes/alertsRoutes');
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: process.env.CORS_ORIGIN || '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE']
+  }
+});
+
 const PORT = process.env.PORT || 3000;
+
+// Hacer io accesible globalmente para emitir eventos desde controladores
+app.set('io', io);
 
 // Middlewares
 app.use(cors());
@@ -33,6 +46,59 @@ app.use((req, res, next) => {
     console.log(`🌐 [${timestamp}] ${method} ${path} - IP: ${ip}`);
   }
   next();
+});
+
+// Configuración de Socket.IO para alertas en tiempo real
+io.on('connection', (socket) => {
+  if (process.env.NODE_ENV !== 'test') {
+    console.log('Cliente conectado a WebSocket:', socket.id);
+  }
+  
+  // Suscribir usuario a alertas
+  socket.on('subscribe-alerts', (userId) => {
+    socket.join(`user-${userId}`);
+    socket.join('all-alerts');
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(`Usuario ${userId} suscrito a alertas`);
+    }
+    socket.emit('subscription-confirmed', {
+      success: true,
+      userId: userId,
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  // Suscribir a alertas de administrador
+  socket.on('subscribe-admin-alerts', (userId) => {
+    socket.join('admin-alerts');
+    socket.join(`user-${userId}`);
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(`Administrador ${userId} suscrito a alertas admin`);
+    }
+    socket.emit('subscription-confirmed', {
+      success: true,
+      userId: userId,
+      role: 'admin',
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  // Desuscribir de alertas
+  socket.on('unsubscribe-alerts', (userId) => {
+    socket.leave(`user-${userId}`);
+    socket.leave('all-alerts');
+    socket.leave('admin-alerts');
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(`Usuario ${userId} desuscrito de alertas`);
+    }
+  });
+
+  // Manejo de desconexión
+  socket.on('disconnect', () => {
+    if (process.env.NODE_ENV !== 'test') {
+      console.log('Cliente desconectado:', socket.id);
+    }
+  });
 });
 
 // Rutas
@@ -79,10 +145,11 @@ app.use((error, req, res, next) => {
 
 // Iniciar servidor solo si no estamos en modo test
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, () => {
+  server.listen(PORT, () => {
     console.log(`🚀 Servidor CEMAC-API ejecutándose en puerto ${PORT}`);
     console.log(`📱 API disponible en: http://localhost:${PORT}`);
+    console.log(`🔌 WebSocket disponible para alertas en tiempo real`);
   });
 }
 
-module.exports = app;
+module.exports = { app, server, io };

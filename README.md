@@ -112,7 +112,33 @@ LOG_LEVEL=info
 CLOUDINARY_CLOUD_NAME=tu-cloud-name
 CLOUDINARY_API_KEY=tu-api-key
 CLOUDINARY_API_SECRET=tu-api-secret
+
+# Email (para notificaciones de alertas)
+EMAIL_USER=tu-email@gmail.com
+EMAIL_APP_PASSWORD=tu-contraseña-de-aplicacion-gmail
+EMAIL_SERVICE=gmail
+EMAIL_FROM="CEMAC Sistema <tu-email@gmail.com>"
+
+# Firebase Cloud Messaging (para notificaciones push)
+FCM_SERVER_KEY=tu-fcm-server-key
+
+# Frontend URL (para links en emails)
+FRONTEND_URL=https://cemac.vercel.app/
 ```
+
+**🔐 Importante - Contraseña de Aplicación Gmail:**
+
+Para `EMAIL_APP_PASSWORD`, **NO uses tu contraseña de Gmail**. Necesitas generar una "Contraseña de aplicación":
+
+1. Ve a https://myaccount.google.com/apppasswords
+2. Inicia sesión con tu cuenta de Gmail
+3. Selecciona "Correo" y tu dispositivo
+4. Copia la contraseña de 16 caracteres generada
+5. Úsala en `EMAIL_APP_PASSWORD` (sin espacios)
+
+**Ejemplo:** `EMAIL_APP_PASSWORD=jgka wgfo cket edda` (quita los espacios)
+
+Si no ves la opción de contraseñas de aplicación, habilita la verificación en 2 pasos primero.
 
 ### 3. Configurar Firebase
 
@@ -2729,6 +2755,699 @@ curl -X POST http://localhost:3000/alerts/generate \
 curl -X GET "http://localhost:3000/alerts/history?month=2025-11" \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
+
+---
+
+## 🔔 Notificaciones y Métricas Avanzadas
+
+### 📊 Métricas de Alertas (GET /alerts/metrics)
+
+Obtiene análisis detallado de alertas en un período de tiempo con tendencias y estadísticas.
+
+```bash
+# Métricas de los últimos 30 días (por defecto)
+curl -X GET http://localhost:3000/alerts/metrics \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# Métricas personalizadas por rango de fechas
+curl -X GET "http://localhost:3000/alerts/metrics?startDate=2025-11-01&endDate=2025-11-15" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "data": {
+    "period": {
+      "startDate": "2025-11-01T00:00:00.000Z",
+      "endDate": "2025-11-15T23:59:59.000Z"
+    },
+    "totalAlerts": 125,
+    "alertsByDay": [
+      { "date": "2025-11-01", "count": 12 },
+      { "date": "2025-11-02", "count": 15 },
+      { "date": "2025-11-03", "count": 8 }
+    ],
+    "averageResolutionTime": 7200000,
+    "resolutionRate": 0.85,
+    "topAffectedCategories": [
+      { "category": "Papelería", "count": 45 },
+      { "category": "Escolar", "count": 32 },
+      { "category": "Oficina", "count": 28 }
+    ],
+    "alertTrends": {
+      "increasing": false,
+      "percentageChange": -5.2
+    }
+  }
+}
+```
+
+**Campos de respuesta:**
+- `totalAlerts` - Total de alertas en el período
+- `alertsByDay` - Conteo diario de alertas
+- `averageResolutionTime` - Tiempo promedio de resolución en milisegundos
+- `resolutionRate` - Porcentaje de alertas resueltas (0-1)
+- `topAffectedCategories` - Top 5 categorías con más alertas
+- `alertTrends` - Tendencia (increasing/decreasing) y cambio porcentual
+
+### ⚙️ Verificar Configuración de Notificaciones (GET /alerts/config/notifications)
+
+Verifica el estado de configuración de notificaciones push y email. Solo administradores.
+
+```bash
+curl -X GET http://localhost:3000/alerts/config/notifications \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "data": {
+    "email": {
+      "configured": true,
+      "service": "gmail",
+      "from": "CEMAC Sistema <jh6466011@gmail.com>",
+      "user": "✅ Configurado"
+    },
+    "push": {
+      "configured": true,
+      "fcmKey": "✅ Configurado"
+    },
+    "frontend": {
+      "url": "https://cemac.vercel.app/"
+    },
+    "admins": {
+      "count": 3,
+      "emails": [
+        "admin1@cemac.com",
+        "admin2@cemac.com",
+        "admin3@cemac.com"
+      ]
+    }
+  },
+  "message": "Configuración de notificaciones verificada"
+}
+```
+
+**Casos de uso:**
+- Verificar que las notificaciones estén correctamente configuradas
+- Diagnosticar problemas de envío de emails o push
+- Ver qué administradores recibirán notificaciones
+- Validar antes de generar alertas críticas
+
+### 🔔 Notificaciones Push con Firebase Cloud Messaging
+
+El sistema envía notificaciones push automáticas para alertas críticas usando Firebase Cloud Messaging.
+
+**Características:**
+- Notificaciones automáticas para alertas `urgente` y `alta`
+- Envío a topic `admin-alerts` para todos los administradores
+- Incluye datos de la alerta (ID, prioridad, producto, stock)
+- Colores personalizados según prioridad
+- Sonidos diferenciados para alertas urgentes
+
+**Configuración del cliente (ejemplo JavaScript):**
+```javascript
+// Importar Firebase Messaging
+import { getMessaging, getToken, onMessage } from 'firebase/messaging';
+
+// Obtener token FCM
+const messaging = getMessaging();
+const token = await getToken(messaging, { 
+  vapidKey: 'YOUR_VAPID_KEY' 
+});
+
+// Suscribirse al topic de administradores
+await fetch('https://iid.googleapis.com/iid/v1/' + token + '/rel/topics/admin-alerts', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'key=YOUR_SERVER_KEY'
+  }
+});
+
+// Escuchar notificaciones en primer plano
+onMessage(messaging, (payload) => {
+  console.log('Nueva alerta:', payload);
+  // Mostrar notificación personalizada
+  showNotification(payload.notification.title, payload.notification.body);
+});
+```
+
+**Estructura de notificación push:**
+```json
+{
+  "notification": {
+    "title": "Alerta Critica",
+    "body": "Producto agotado: Cuaderno Profesional en Papelería"
+  },
+  "data": {
+    "alertId": "alert_1234567890_abc",
+    "type": "stock_low",
+    "priority": "urgente",
+    "productId": "prod_123",
+    "productName": "Cuaderno Profesional",
+    "currentStock": "0",
+    "timestamp": "2025-11-15T10:30:00.000Z"
+  }
+}
+```
+
+### 📧 Notificaciones por Email
+
+El sistema envía emails automáticos para alertas urgentes a los administradores configurados.
+
+**Configuración requerida (.env):**
+```bash
+EMAIL_USER=tu-email@gmail.com
+EMAIL_APP_PASSWORD=tu-app-password-gmail
+EMAIL_SERVICE=gmail
+EMAIL_FROM="CEMAC Sistema <tu-email@gmail.com>"
+```
+
+**Características del email:**
+- Diseño HTML responsive con colores personalizados según prioridad
+- Detalles completos de la alerta (producto, stock, categoría)
+- Sugerencias de acciones a tomar
+- Compatible con todos los clientes de email (Gmail, Outlook, Apple Mail)
+- Formato profesional con header y footer
+
+**Cuándo se envía:**
+- ✅ Automáticamente al crear alertas con prioridad `urgente` o `alta`
+- ✅ Al generar alertas manualmente con `POST /alerts/generate`
+- ✅ El envío es asíncrono (no bloquea la creación de la alerta)
+- ✅ Se registra en logs del servidor con detalles del envío
+
+**Destinatarios:**
+- Todos los usuarios con `role: "admin"` y `isActive: true`
+- El sistema busca dinámicamente los emails de administradores en Firebase
+- Se puede probar agregando múltiples usuarios admin con diferentes emails
+
+**Estructura del email HTML:**
+
+```html
+<!-- Cabecera con color según prioridad -->
+<div style="background: #dc3545; color: white; padding: 20px;">
+  <h1>🚨 ALERTA URGENTE</h1>
+</div>
+
+<!-- Cuerpo con detalles -->
+<div style="padding: 30px;">
+  <!-- Badge de prioridad -->
+  <span style="background: #dc3545; color: white; padding: 8px 16px;">
+    URGENTE
+  </span>
+  
+  <!-- Información del producto -->
+  <h2>Producto agotado: Cuaderno Profesional</h2>
+  <p><strong>Categoría:</strong> Papelería</p>
+  <p><strong>Stock actual:</strong> 0 unidades</p>
+  <p><strong>Stock mínimo:</strong> 20 unidades</p>
+  
+  <!-- Mensaje de la alerta -->
+  <p>Producto agotado en Papelería. Se requiere reposición urgente.</p>
+  
+  <!-- Sugerencias de acción -->
+  <div style="background: #f8f9fa; padding: 20px;">
+    <h3>Acciones sugeridas:</h3>
+    <ul>
+      <li>Contactar al proveedor inmediatamente</li>
+      <li>Verificar pedidos pendientes</li>
+      <li>Revisar el historial de ventas</li>
+    </ul>
+  </div>
+</div>
+
+<!-- Footer -->
+<div style="background: #343a40; color: white; padding: 20px;">
+  <p>CEMAC - Sistema de Gestión de Inventario</p>
+  <a href="https://cemac.vercel.app/alerts">Ver todas las alertas</a>
+</div>
+```
+
+**Colores según prioridad:**
+- 🔴 **Urgente**: `#dc3545` (Rojo) - Stock agotado (0 unidades)
+- 🟠 **Alta**: `#fd7e14` (Naranja) - Stock muy bajo (< 10 unidades)
+- 🟡 **Media**: `#ffc107` (Amarillo) - Stock bajo pero manejable
+- 🔵 **Baja**: `#17a2b8` (Azul) - Alertas informativas
+
+#### 💼 Cómo Usar el Sistema de Emails
+
+**Paso 1: Configurar Gmail para Emails de Alerta**
+
+1. **Habilitar verificación en 2 pasos:**
+   - Ve a https://myaccount.google.com/security
+   - Activa "Verificación en 2 pasos"
+
+2. **Generar contraseña de aplicación:**
+   - Ve a https://myaccount.google.com/apppasswords
+   - Selecciona "Correo" y tu dispositivo
+   - Copia la contraseña de 16 caracteres (sin espacios)
+
+3. **Configurar en .env:**
+   ```env
+   EMAIL_USER=tu-email@gmail.com
+   EMAIL_APP_PASSWORD=abcd efgh ijkl mnop  # Sin espacios: abcdefghijklmnop
+   EMAIL_SERVICE=gmail
+   EMAIL_FROM="CEMAC Sistema <tu-email@gmail.com>"
+   ```
+
+**Paso 2: Crear Administradores que Recibirán Emails**
+
+```bash
+# Crear usuario administrador con tu email
+curl -X POST http://localhost:3000/auth/register \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "tu_email@gmail.com",
+    "password": "password123",
+    "firstName": "Nombre",
+    "lastName": "Apellido",
+    "role": "admin"
+  }'
+```
+
+**Paso 3: Verificar Configuración**
+
+```bash
+# Verificar que email y FCM estén configurados
+curl -X GET http://localhost:3000/alerts/config/notifications \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+**Respuesta esperada:**
+```json
+{
+  "success": true,
+  "data": {
+    "email": {
+      "configured": true,
+      "service": "gmail",
+      "from": "CEMAC Sistema <tu-email@gmail.com>",
+      "user": "✅ Configurado"
+    },
+    "admins": {
+      "count": 3,
+      "emails": [
+        "admin1@cemac.com",
+        "admin2@cemac.com",
+        "admin3@cemac.com"
+      ]
+    }
+  },
+  "message": "Configuración de notificaciones verificada"
+}
+```
+
+**Paso 4: Generar Alertas (Envío Automático de Emails)**
+
+```bash
+# Genera alertas del inventario
+# Si hay productos con stock urgente/alto, envía emails automáticamente
+curl -X POST http://localhost:3000/alerts/generate \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+**Logs del servidor cuando se envía email:**
+```
+📧 Email enviado a 3 administradores
+Email de alerta enviado exitosamente: {
+  messageId: '<60705459-b00e-fd47-fa15-b185f45287cc@gmail.com>',
+  recipients: 3,
+  alertId: 'alert_1763310109725',
+  priority: 'alta'
+}
+```
+
+**Paso 5: Flujo Completo de Uso**
+
+```bash
+# 1. Crear producto con stock bajo
+curl -X POST http://localhost:3000/inventory \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Cuaderno A4",
+    "price": 50.00,
+    "availability": "limited",
+    "stock": 3,
+    "category": "Papelería"
+  }'
+
+# 2. Generar alertas (detecta el stock bajo y envía email)
+curl -X POST http://localhost:3000/alerts/generate \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+
+# 3. Revisar tu bandeja de entrada
+# Deberías recibir un email con:
+# - Asunto: "⚠️ ALERTA ALTA - Stock bajo en Cuaderno A4"
+# - Badge naranja de ALTA prioridad
+# - Detalles: Stock actual 3 / Mínimo 10
+# - Sugerencias de acción
+
+# 4. Ver detalles de la alerta en la API
+curl -X GET "http://localhost:3000/alerts?priority=alta" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Ejemplo Real de Email Recibido:**
+
+```
+De: CEMAC Sistema <jh6466011@gmail.com>
+Para: admin1@cemac.com, admin2@cemac.com, admin3@cemac.com
+Asunto: ⚠️ ALERTA ALTA - Stock bajo en Cuaderno A4
+
+[Email HTML con formato profesional]
+
+🚨 ALERTA ALTA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Stock bajo en producto
+
+Producto: Cuaderno A4
+Categoría: Papelería
+Stock actual: 3 unidades
+Stock mínimo: 10 unidades
+
+Mensaje de la alerta:
+Stock bajo: Solo quedan 3 unidades de Cuaderno A4 en Papelería
+
+⚠️ Acciones Sugeridas:
+• Contactar al proveedor para reponer stock
+• Verificar si hay pedidos pendientes en camino
+• Revisar el historial de ventas del producto
+• Considerar ajustar el stock mínimo si es necesario
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CEMAC - Sistema de Gestión de Inventario
+https://cemac.vercel.app/alerts
+```
+
+**Casos de Uso Avanzados:**
+
+**1. Configurar múltiples administradores para notificaciones en equipo:**
+```bash
+# Admin 1: Gerente General
+curl -X POST http://localhost:3000/auth/register \
+  -d '{"email": "gerente@empresa.com", "role": "admin", ...}'
+
+# Admin 2: Jefe de Almacén
+curl -X POST http://localhost:3000/auth/register \
+  -d '{"email": "almacen@empresa.com", "role": "admin", ...}'
+
+# Admin 3: Compras
+curl -X POST http://localhost:3000/auth/register \
+  -d '{"email": "compras@empresa.com", "role": "admin", ...}'
+
+# Ahora los 3 recibirán emails de alertas críticas
+```
+
+**2. Usar servicios de email temporal para testing:**
+```bash
+# Opción 1: Ethereal Email (desarrollo)
+# 1. Ve a https://ethereal.email/create
+# 2. Copia las credenciales SMTP
+# 3. Configura en .env:
+EMAIL_USER=usuario@ethereal.email
+EMAIL_APP_PASSWORD=contraseña-generada
+EMAIL_SERVICE=ethereal
+
+# Opción 2: Gmail con alias
+# Usa el mismo email con +alias:
+# admin+test1@gmail.com
+# admin+test2@gmail.com
+# admin+test3@gmail.com
+# Todos llegan a admin@gmail.com pero separados por filtros
+```
+
+**3. Programar generación automática de alertas (Cron Job):**
+```bash
+# Crear archivo: scripts/daily-alerts.sh
+#!/bin/bash
+curl -X POST http://localhost:3000/alerts/generate \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+
+# En crontab (ejecutar diariamente a las 8 AM):
+# 0 8 * * * /ruta/scripts/daily-alerts.sh
+```
+
+#### 🧪 Probar Envío de Emails
+
+**Método 1: Script de Prueba Rápida**
+
+El proyecto incluye un script para verificar que los emails se envíen correctamente:
+
+```bash
+# Ejecutar test de envío de emails
+node test/test-email-sending.js
+```
+
+**El script realiza:**
+- ✅ Verifica la configuración de EMAIL_USER y EMAIL_APP_PASSWORD
+- ✅ Crea una alerta de prueba
+- ✅ Envía el email a los destinatarios configurados
+- ✅ Muestra el resultado del envío con detalles
+
+**Salida esperada:**
+```
+╔════════════════════════════════════════════╗
+║   📧 TEST DE ENVÍO DE EMAILS - ALERTAS    ║
+╚════════════════════════════════════════════╝
+
+🔧 Verificando configuración...
+   ├─ EMAIL_USER: ✅ Configurado
+   ├─ EMAIL_APP_PASSWORD: ✅ Configurado
+   └─ EMAIL_SERVICE: gmail
+
+📦 Alerta de prueba:
+   ├─ Prioridad: ⚠️ ALERTA ALTA
+   └─ Mensaje: Este es un email de prueba
+
+📧 Enviando a 1 destinatario(s)...
+
+✅ ¡EMAIL ENVIADO EXITOSAMENTE!
+```
+
+**Personalizar destinatarios:**
+
+Edita el archivo `test/test-email-sending.js`:
+
+```javascript
+// Línea 10: Agregar más emails de prueba
+const TEST_EMAILS = [
+  'jh6466011@gmail.com',
+  'tu_otro_email@gmail.com',  // ← Agrega aquí
+  'test@example.com'
+];
+```
+
+**Método 2: Endpoint API**
+
+Usa el endpoint de generación de alertas para probar en ambiente real:
+
+```bash
+# 1. Verificar configuración
+curl -X GET http://localhost:3000/alerts/config/notifications \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+
+# 2. Generar alertas (envía emails automáticamente si hay urgentes)
+curl -X POST http://localhost:3000/alerts/generate \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+
+# 3. Revisar tu bandeja de entrada
+```
+
+**Método 3: Crear Usuarios Admin con Emails de Prueba**
+
+Para recibir notificaciones en múltiples emails:
+
+```bash
+# Crear usuario administrador con tu email
+curl -X POST http://localhost:3000/auth/register \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "tu_email_prueba@gmail.com",
+    "password": "password123",
+    "firstName": "Nombre",
+    "lastName": "Apellido",
+    "role": "admin"
+  }'
+```
+
+Ahora todos los usuarios con `role: "admin"` y `isActive: true` recibirán emails de alertas críticas.
+
+**📧 Qué buscar en el email recibido:**
+
+1. **Remitente:** CEMAC Sistema <tu-email@gmail.com>
+2. **Asunto:** 
+   - `🚨 ALERTA URGENTE` - para alertas urgentes
+   - `⚠️ ALERTA ALTA` - para alertas altas
+3. **Contenido HTML:**
+   - Badge de color según prioridad
+   - Nombre del producto
+   - Stock actual vs mínimo
+   - Categoría del producto
+   - Sugerencias de acción
+
+**🔍 Si no llegan los emails:**
+
+```bash
+# 1. Verificar configuración
+node -e "require('dotenv').config(); console.log('EMAIL_USER:', process.env.EMAIL_USER, '\nEMAIL_APP_PASSWORD:', process.env.EMAIL_APP_PASSWORD ? '✅ Configurado' : '❌ No configurado');"
+
+# 2. Revisar logs del servidor
+# Busca mensajes como:
+# ✅ "📧 Email enviado a X administradores"
+# ❌ "Error al enviar email de alerta"
+
+# 3. Verificar que uses "Contraseña de aplicación" de Gmail
+# No uses tu contraseña normal, genera una en:
+# https://myaccount.google.com/apppasswords
+```
+
+**💡 Servicios de Email Temporal para Testing:**
+
+Si no quieres usar tu email personal:
+
+- **Ethereal Email**: https://ethereal.email/ (desarrollo)
+- **Mailtrap**: https://mailtrap.io/ (testing profesional)
+- **Gmail con alias**: usa `+alias` (ej: `tumail+test1@gmail.com`)
+
+### 🔌 WebSocket para Alertas en Tiempo Real
+
+El servidor implementa Socket.IO para notificaciones instantáneas a clientes conectados.
+
+**Conexión del cliente:**
+```javascript
+import io from 'socket.io-client';
+
+// Conectar al servidor
+const socket = io('http://localhost:3000', {
+  auth: {
+    token: 'YOUR_JWT_TOKEN'
+  }
+});
+
+// Suscribirse a alertas
+socket.emit('subscribe-alerts', userId);
+
+// Suscripción para administradores
+socket.emit('subscribe-admin-alerts', userId);
+
+// Escuchar nuevas alertas
+socket.on('new-alert', (alert) => {
+  console.log('Nueva alerta recibida:', alert);
+  // Actualizar UI con la nueva alerta
+  updateAlertBadge(alert);
+});
+
+// Escuchar alertas críticas (solo admins)
+socket.on('new-critical-alert', (alert) => {
+  console.log('Alerta crítica:', alert);
+  // Mostrar notificación prominente
+  showCriticalAlert(alert);
+});
+
+// Confirmar suscripción
+socket.on('subscription-confirmed', (data) => {
+  console.log('Suscrito exitosamente:', data);
+});
+
+// Desuscribirse
+socket.emit('unsubscribe-alerts', userId);
+```
+
+**Eventos disponibles:**
+
+| Evento | Dirección | Descripción |
+|--------|-----------|-------------|
+| `subscribe-alerts` | Cliente → Servidor | Suscribirse a alertas generales |
+| `subscribe-admin-alerts` | Cliente → Servidor | Suscribirse a alertas admin |
+| `unsubscribe-alerts` | Cliente → Servidor | Cancelar suscripción |
+| `new-alert` | Servidor → Cliente | Nueva alerta creada |
+| `new-critical-alert` | Servidor → Cliente | Alerta urgente/alta (solo admins) |
+| `subscription-confirmed` | Servidor → Cliente | Confirmación de suscripción |
+
+**Rooms de Socket.IO:**
+- `user-{userId}` - Alertas específicas del usuario
+- `all-alerts` - Todas las alertas del sistema
+- `admin-alerts` - Solo para administradores
+
+**Ejemplo completo React:**
+```javascript
+import { useEffect, useState } from 'react';
+import io from 'socket.io-client';
+
+function AlertsComponent({ userId, userRole }) {
+  const [alerts, setAlerts] = useState([]);
+  const [socket, setSocket] = useState(null);
+
+  useEffect(() => {
+    // Conectar WebSocket
+    const newSocket = io('http://localhost:3000');
+    setSocket(newSocket);
+
+    // Suscribirse según rol
+    if (userRole === 'admin') {
+      newSocket.emit('subscribe-admin-alerts', userId);
+    } else {
+      newSocket.emit('subscribe-alerts', userId);
+    }
+
+    // Escuchar nuevas alertas
+    newSocket.on('new-alert', (alert) => {
+      setAlerts(prev => [alert, ...prev]);
+      // Mostrar notificación en el navegador
+      if (Notification.permission === 'granted') {
+        new Notification('Nueva Alerta', {
+          body: alert.message,
+          icon: '/alert-icon.png'
+        });
+      }
+    });
+
+    // Limpiar al desmontar
+    return () => {
+      newSocket.emit('unsubscribe-alerts', userId);
+      newSocket.close();
+    };
+  }, [userId, userRole]);
+
+  return (
+    <div>
+      {alerts.map(alert => (
+        <AlertCard key={alert.id} alert={alert} />
+      ))}
+    </div>
+  );
+}
+```
+
+### ⚡ Flujo Completo de Notificaciones
+
+Cuando se genera una alerta urgente:
+
+1. **Creación en Firebase** - Se guarda en `/alerts/{alertId}`
+2. **WebSocket** - Se emite evento `new-alert` a clientes conectados
+3. **Push Notification** - Se envía a topic `admin-alerts` vía FCM
+4. **Email** - Se envía a todos los emails en `ADMIN_EMAILS`
+
+Todo esto ocurre de forma asíncrona y no bloquea la respuesta del endpoint.
+
+### 📈 Métricas de Uso
+
+Use el endpoint `/alerts/metrics` para:
+- Generar reportes semanales/mensuales
+- Identificar patrones de alertas
+- Medir eficiencia de resolución
+- Detectar categorías problemáticas
+- Visualizar tendencias en dashboards
+
+---
 
 ## 🧪 Testing en servidor de prueba
 

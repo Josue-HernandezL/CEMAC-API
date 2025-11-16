@@ -10,7 +10,9 @@ const {
   getAlertCount,
   updateThresholds,
   getHistory,
-  deleteAlert
+  deleteAlert,
+  getAlertMetrics,
+  checkNotificationConfig
 } = require('../controllers/alertsController');
 const { authenticateUser, authenticateAdmin } = require('../middleware/auth');
 
@@ -28,6 +30,12 @@ router.get('/count', authenticateUser, getAlertCount);
 
 // GET /alerts/history - Obtener historial de alertas (User/Admin)
 router.get('/history', authenticateUser, getHistory);
+
+// GET /alerts/metrics - Obtener métricas de alertas (User/Admin)
+router.get('/metrics', authenticateUser, getAlertMetrics);
+
+// GET /alerts/config/notifications - Verificar configuración de notificaciones (Admin)
+router.get('/config/notifications', authenticateAdmin, checkNotificationConfig);
 
 // PUT /alerts/mark-all-read - Marcar todas como leídas (User/Admin)
 // IMPORTANTE: Esta ruta debe ir ANTES de /:alertId para evitar conflictos

@@ -3,6 +3,7 @@
     ".read": false,
     ".write": false,
     "users": {
+      ".indexOn": ["role", "isActive", "email"],
       "$uid": {
         ".read": "$uid === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'admin'",
         ".write": "$uid === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'admin'"
@@ -29,6 +30,33 @@
         ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
         ".indexOn": ["productId", "timestamp", "type"]
       }
+    },
+    "alerts": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      ".indexOn": ["status", "priority", "createdAt", "productId", "type"],
+      "$alertId": {
+        ".validate": "newData.hasChildren(['id', 'type', 'priority', 'status', 'productId', 'productName'])"
+      }
+    },
+    "alertSettings": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
+      "stockThresholds": {
+        ".validate": "newData.hasChildren(['urgente', 'alta', 'media', 'baja'])"
+      }
+    },
+    "alertHistory": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      "$yearMonth": {
+        ".indexOn": ["createdAt", "resolvedAt", "priority", "productCategory"]
+      }
+    },
+    "deletedAlerts": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
+      ".indexOn": ["deletedAt"]
     }
   }
 }

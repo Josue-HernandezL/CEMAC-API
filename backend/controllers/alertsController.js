@@ -1,4 +1,31 @@
 const { db } = require('../../firebaseConfig');
+const { sendPushNotification } = require('../config/notificationService');
+const { sendAlertEmail, validateEmailConfig } = require('../config/emailService');
+
+// Función auxiliar para obtener emails de administradores
+const getAdminEmails = async () => {
+  try {
+    const usersRef = db.ref('users');
+    const snapshot = await usersRef.orderByChild('role').equalTo('admin').once('value');
+    
+    if (!snapshot.exists()) {
+      return [];
+    }
+
+    const admins = [];
+    snapshot.forEach(child => {
+      const user = child.val();
+      if (user.email && user.isActive !== false) {
+        admins.push(user.email);
+      }
+    });
+
+    return admins;
+  } catch (error) {
+    console.error('Error obteniendo emails de administradores:', error);
+    return [];
+  }
+};
 
 // Función auxiliar para generar ID único
 const generateAlertId = () => {
@@ -137,6 +164,42 @@ const generateAlerts = async (req, res) => {
     if (Object.keys(newAlerts).length > 0) {
       await alertsRef.update(newAlerts);
       console.log(`✅ Se crearon ${alertsArray.length} nuevas alertas`);
+
+      // 6. Enviar notificaciones para alertas urgentes
+      const urgentAlerts = alertsArray.filter(a => a.priority === 'urgente' || a.priority === 'alta');
+      
+      for (const alert of urgentAlerts) {
+        try {
+          // Emitir evento WebSocket en tiempo real
+          if (req.app && req.app.get('io')) {
+            const io = req.app.get('io');
+            io.to('all-alerts').emit('new-alert', alert);
+            io.to('admin-alerts').emit('new-critical-alert', alert);
+          }
+
+          // Enviar notificación push (no bloquea si falla)
+          if (alert.priority === 'urgente' || alert.priority === 'alta') {
+            // Push notification
+            sendPushNotification('admin-alerts', alert).catch(err => 
+              console.warn('⚠️ Error enviando push notification:', err.message)
+            );
+
+            // Email notification - obtener emails de admins
+            const adminEmails = await getAdminEmails();
+            
+            if (adminEmails.length > 0 && validateEmailConfig()) {
+              sendAlertEmail(alert, adminEmails).catch(err =>
+                console.warn('⚠️ Error enviando email de alerta:', err.message)
+              );
+              console.log(`📧 Email enviado a ${adminEmails.length} administradores`);
+            } else {
+              console.warn('⚠️ No hay administradores configurados o email no disponible');
+            }
+          }
+        } catch (notifError) {
+          console.warn('Error procesando notificaciones:', notifError.message);
+        }
+      }
     } else {
       console.log('ℹ️ No se generaron nuevas alertas');
     }
@@ -951,6 +1014,201 @@ const deleteAlert = async (req, res) => {
   }
 };
 
+// GET /alerts/metrics - Obtener métricas de alertas
+const getAlertMetrics = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    // Validar fechas
+    const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // 30 días atrás
+    const end = endDate ? new Date(endDate) : new Date();
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return res.status(400).json({
+        success: false,
+        error: 'Formato de fecha inválido. Use ISO 8601 (YYYY-MM-DD)',
+        code: 'INVALID_DATE_FORMAT'
+      });
+    }
+
+    // Obtener alertas activas
+    const alertsRef = db.ref('alerts');
+    const alertsSnapshot = await alertsRef.once('value');
+    const alerts = alertsSnapshot.exists() ? Object.values(alertsSnapshot.val()) : [];
+
+    // Obtener historial en el rango de fechas
+    const year = start.getFullYear();
+    const startMonth = start.getMonth() + 1;
+    const endMonth = end.getMonth() + 1;
+    
+    let historicalAlerts = [];
+    for (let m = startMonth; m <= endMonth; m++) {
+      const monthKey = `${year}-${String(m).padStart(2, '0')}`;
+      const historyRef = db.ref(`alertHistory/${monthKey}`);
+      const historySnapshot = await historyRef.once('value');
+      
+      if (historySnapshot.exists()) {
+        historicalAlerts = historicalAlerts.concat(Object.values(historySnapshot.val()));
+      }
+    }
+
+    // Combinar todas las alertas en el rango
+    const allAlerts = [...alerts, ...historicalAlerts].filter(alert => {
+      const alertDate = new Date(alert.createdAt);
+      return alertDate >= start && alertDate <= end;
+    });
+
+    if (allAlerts.length === 0) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          period: {
+            startDate: start.toISOString(),
+            endDate: end.toISOString()
+          },
+          totalAlerts: 0,
+          alertsByDay: [],
+          averageResolutionTime: 0,
+          resolutionRate: 0,
+          topAffectedCategories: [],
+          alertTrends: {
+            increasing: false,
+            percentageChange: 0
+          }
+        }
+      });
+    }
+
+    // 1. Alertas por día
+    const alertsByDay = {};
+    allAlerts.forEach(alert => {
+      const date = new Date(alert.createdAt).toISOString().split('T')[0];
+      alertsByDay[date] = (alertsByDay[date] || 0) + 1;
+    });
+
+    const alertsByDayArray = Object.entries(alertsByDay)
+      .map(([date, count]) => ({ date, count }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    // 2. Tiempo promedio de resolución
+    const resolvedAlerts = allAlerts.filter(a => a.resolvedAt);
+    let averageResolutionTime = 0;
+    
+    if (resolvedAlerts.length > 0) {
+      const totalResolutionTime = resolvedAlerts.reduce((sum, alert) => {
+        const created = new Date(alert.createdAt).getTime();
+        const resolved = new Date(alert.resolvedAt).getTime();
+        return sum + (resolved - created);
+      }, 0);
+      averageResolutionTime = Math.round(totalResolutionTime / resolvedAlerts.length);
+    }
+
+    // 3. Tasa de resolución
+    const resolutionRate = allAlerts.length > 0 
+      ? parseFloat((resolvedAlerts.length / allAlerts.length).toFixed(2))
+      : 0;
+
+    // 4. Categorías más afectadas
+    const categoryCounts = {};
+    allAlerts.forEach(alert => {
+      const category = alert.productCategory || 'Sin categoría';
+      categoryCounts[category] = (categoryCounts[category] || 0) + 1;
+    });
+
+    const topAffectedCategories = Object.entries(categoryCounts)
+      .map(([category, count]) => ({ category, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    // 5. Tendencias de alertas (comparar primera mitad vs segunda mitad del período)
+    const midPoint = new Date((start.getTime() + end.getTime()) / 2);
+    const firstHalf = allAlerts.filter(a => new Date(a.createdAt) < midPoint).length;
+    const secondHalf = allAlerts.filter(a => new Date(a.createdAt) >= midPoint).length;
+
+    let percentageChange = 0;
+    let increasing = false;
+
+    if (firstHalf > 0) {
+      percentageChange = parseFloat((((secondHalf - firstHalf) / firstHalf) * 100).toFixed(2));
+      increasing = percentageChange > 0;
+    } else if (secondHalf > 0) {
+      percentageChange = 100;
+      increasing = true;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        period: {
+          startDate: start.toISOString(),
+          endDate: end.toISOString()
+        },
+        totalAlerts: allAlerts.length,
+        alertsByDay: alertsByDayArray,
+        averageResolutionTime,
+        resolutionRate,
+        topAffectedCategories,
+        alertTrends: {
+          increasing,
+          percentageChange
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Error obteniendo métricas:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error interno del servidor'
+    });
+  }
+};
+
+// GET /alerts/config/notifications - Verificar configuración de notificaciones
+const checkNotificationConfig = async (req, res) => {
+  try {
+    const { validateFCMConfig } = require('../config/notificationService');
+    
+    const config = {
+      email: {
+        configured: validateEmailConfig(),
+        service: process.env.EMAIL_SERVICE || 'gmail',
+        from: process.env.EMAIL_FROM || 'No configurado',
+        user: process.env.EMAIL_USER ? '✅ Configurado' : '❌ No configurado'
+      },
+      push: {
+        configured: validateFCMConfig(),
+        fcmKey: process.env.FCM_SERVER_KEY ? '✅ Configurado' : '❌ No configurado'
+      },
+      frontend: {
+        url: process.env.FRONTEND_URL || 'http://localhost:3000'
+      },
+      admins: {
+        count: 0,
+        emails: []
+      }
+    };
+
+    // Obtener administradores
+    const adminEmails = await getAdminEmails();
+    config.admins.count = adminEmails.length;
+    config.admins.emails = adminEmails;
+
+    res.status(200).json({
+      success: true,
+      data: config,
+      message: 'Configuración de notificaciones verificada'
+    });
+
+  } catch (error) {
+    console.error('Error verificando configuración:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al verificar configuración'
+    });
+  }
+};
+
 module.exports = {
   generateAlerts,
   getAlerts,
@@ -961,5 +1219,7 @@ module.exports = {
   getAlertCount,
   updateThresholds,
   getHistory,
-  deleteAlert
+  deleteAlert,
+  getAlertMetrics,
+  checkNotificationConfig
 };
