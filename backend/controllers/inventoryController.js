@@ -114,7 +114,7 @@ const getProducts = async (req, res) => {
         (product.description && product.description.toLowerCase().includes(searchTerm)) ||
         (product.barcode && product.barcode.toLowerCase().includes(searchTerm)) ||
         (product.supplierCode && product.supplierCode.toLowerCase().includes(searchTerm)) ||
-        (product.brand && product.brand.toLowerCase().includes(searchTerm)
+        (product.brand && product.brand.toLowerCase().includes(searchTerm))
       );
     }
 
@@ -347,7 +347,7 @@ const createProduct = async (req, res) => {
       stock: availability === 'limited' ? finalStock : null,
       barcode: barcode ? barcode.trim() : null,
       supplierCode: supplierCode ? supplierCode.trim() : null,
-      brand: brand ? brand.trim() : null
+      brand: brand ? brand.trim() : null,
       // Campos de cajas (opcionales)
       unitsPerBox: finalUnitsPerBox,
       boxStock: finalBoxStock,
