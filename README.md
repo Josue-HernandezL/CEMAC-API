@@ -44,6 +44,28 @@ API REST con autenticación Firebase y sistema de gestión de inventario.
 - ✅ **Contadores automáticos** - productCount se actualiza automáticamente
 - ✅ **Protección de integridad** - No se pueden eliminar categorías con productos
 
+### Sistema de Marcas
+- ✅ CRUD completo de marcas de productos
+- ✅ Validación de nombres únicos
+- ✅ Búsqueda de marcas por nombre y descripción
+- ✅ Estadísticas detalladas por marca
+- ✅ **Integración con inventario** - Validación automática al crear/actualizar productos
+- ✅ **Actualización en cascada** - Renombrar marca actualiza todos los productos
+- ✅ **Contadores automáticos** - productCount se actualiza automáticamente
+- ✅ **Protección de integridad** - No se pueden eliminar marcas con productos
+
+### Sistema de Proveedores
+- ✅ CRUD completo de proveedores
+- ✅ Validación de nombres únicos y emails
+- ✅ Búsqueda de proveedores por nombre, contacto, email y teléfono
+- ✅ Gestión de información de contacto (nombre, email, teléfono, dirección)
+- ✅ Estadísticas detalladas por proveedor
+- ✅ **Integración con inventario** - Validación automática al crear/actualizar productos
+- ✅ **Actualización en cascada** - Renombrar proveedor actualiza todos los productos
+- ✅ **Contadores automáticos** - productCount se actualiza automáticamente
+- ✅ **Protección de integridad** - No se pueden eliminar proveedores con productos
+- ✅ **Estado activo/inactivo** - Control de proveedores activos
+
 ### Sistema de Ventas
 - ✅ CRUD completo de ventas
 - ✅ Registro de ventas con múltiples productos
@@ -197,6 +219,28 @@ pnpm start
 - `POST /categories` - Crear nueva categoría
 - `PUT /categories/:id` - Actualizar categoría
 - `DELETE /categories/:id` - Eliminar categoría
+
+### 🏭 Marcas
+
+#### Lectura (usuarios y administradores)
+- `GET /brands` - Listar todas las marcas
+- `GET /brands/:id/stats` - Obtener estadísticas de una marca
+
+#### Escritura (solo administradores)
+- `POST /brands` - Crear nueva marca
+- `PUT /brands/:id` - Actualizar marca
+- `DELETE /brands/:id` - Eliminar marca
+
+### 🚚 Proveedores
+
+#### Lectura (usuarios y administradores)
+- `GET /suppliers` - Listar todos los proveedores
+- `GET /suppliers/:id/stats` - Obtener estadísticas de un proveedor
+
+#### Escritura (solo administradores)
+- `POST /suppliers` - Crear nuevo proveedor
+- `PUT /suppliers/:id` - Actualizar proveedor
+- `DELETE /suppliers/:id` - Eliminar proveedor
 
 ### 💰 Ventas
 
@@ -1594,6 +1638,866 @@ Resultado:
 {
   "error": "Acceso denegado. Se requieren permisos de administrador"
 }
+```
+
+### 🏭 Ejemplos de Gestión de Marcas
+
+#### Listar Todas las Marcas (GET /brands)
+
+```bash
+# Listar todas las marcas
+curl -X GET http://localhost:3000/brands \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+
+# Buscar marcas
+curl -X GET "http://localhost:3000/brands?search=samsung" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "brands": [
+    {
+      "id": "brand_1699123456789_abc",
+      "name": "Samsung",
+      "description": "Productos electrónicos Samsung",
+      "productCount": 35,
+      "createdAt": "2025-11-15T10:30:00Z",
+      "updatedAt": "2025-11-15T10:30:00Z",
+      "createdBy": "admin_uid"
+    },
+    {
+      "id": "brand_1699123456789_def",
+      "name": "Sony",
+      "description": "Electrónica de consumo Sony",
+      "productCount": 28,
+      "createdAt": "2025-11-15T11:00:00Z",
+      "updatedAt": "2025-11-15T11:00:00Z",
+      "createdBy": "admin_uid"
+    }
+  ],
+  "total": 2,
+  "message": "Se encontraron 2 marca(s)"
+}
+```
+
+**Campos de respuesta:**
+- `id` - ID único de la marca
+- `name` - Nombre de la marca
+- `description` - Descripción opcional
+- `productCount` - Número de productos de esta marca
+- `createdAt` - Fecha de creación
+- `updatedAt` - Fecha de última actualización
+- `createdBy` - ID del usuario que creó la marca
+
+#### Crear Nueva Marca (POST /brands)
+
+**⚠️ Solo administradores**
+
+```bash
+# Marca con descripción
+curl -X POST http://localhost:3000/brands \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Apple",
+    "description": "Productos Apple Inc."
+  }'
+
+# Marca sin descripción
+curl -X POST http://localhost:3000/brands \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "LG"
+  }'
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "message": "Marca creada exitosamente",
+  "brand": {
+    "id": "brand_1699123456789_xyz",
+    "name": "Apple",
+    "description": "Productos Apple Inc.",
+    "productCount": 0,
+    "createdAt": "2025-11-15T10:30:00Z",
+    "updatedAt": "2025-11-15T10:30:00Z",
+    "createdBy": "admin_uid"
+  }
+}
+```
+
+**Campos requeridos:**
+- `name` - Nombre de la marca (único)
+
+**Campos opcionales:**
+- `description` - Descripción de la marca
+
+**Validaciones:**
+- ✅ El nombre es requerido y no puede estar vacío
+- ✅ El nombre debe ser único (case-insensitive)
+- ✅ Solo administradores pueden crear marcas
+
+#### Actualizar Marca (PUT /brands/:id)
+
+**⚠️ Solo administradores**
+
+```bash
+# Actualizar nombre y descripción
+curl -X PUT http://localhost:3000/brands/brand_1699123456789_xyz \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Apple Inc.",
+    "description": "Productos tecnológicos Apple Inc."
+  }'
+
+# Actualizar solo el nombre
+curl -X PUT http://localhost:3000/brands/brand_1699123456789_xyz \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Apple"
+  }'
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "message": "Marca actualizada exitosamente",
+  "brand": {
+    "id": "brand_1699123456789_xyz",
+    "name": "Apple Inc.",
+    "description": "Productos tecnológicos Apple Inc.",
+    "productCount": 25,
+    "createdAt": "2025-11-15T10:30:00Z",
+    "updatedAt": "2025-11-15T11:45:00Z",
+    "createdBy": "admin_uid",
+    "updatedBy": "admin_uid"
+  }
+}
+```
+
+**Características importantes:**
+- ✅ **Actualización en cascada**: Si cambias el nombre, se actualiza automáticamente en todos los productos
+- ✅ Validación de nombre único
+- ✅ Solo administradores pueden actualizar
+- ✅ Todos los campos son opcionales (solo se actualizan los proporcionados)
+
+#### Eliminar Marca (DELETE /brands/:id)
+
+**⚠️ Solo administradores**
+
+```bash
+curl -X DELETE http://localhost:3000/brands/brand_1699123456789_xyz \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "message": "Marca eliminada exitosamente",
+  "brandId": "brand_1699123456789_xyz"
+}
+```
+
+**Error si tiene productos asociados:**
+```json
+{
+  "success": false,
+  "message": "No se puede eliminar la marca porque tiene 25 producto(s) asociado(s)"
+}
+```
+
+**Validaciones:**
+- ✅ No se puede eliminar una marca con productos asociados
+- ✅ Solo administradores pueden eliminar
+- ✅ Protección de integridad referencial
+
+#### Obtener Estadísticas de Marca (GET /brands/:id/stats)
+
+```bash
+curl -X GET http://localhost:3000/brands/brand_1699123456789_xyz/stats \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "brand": {
+    "id": "brand_1699123456789_xyz",
+    "name": "Samsung",
+    "description": "Productos electrónicos Samsung",
+    "productCount": 35,
+    "createdAt": "2025-11-15T10:30:00Z",
+    "updatedAt": "2025-11-15T10:30:00Z",
+    "createdBy": "admin_uid"
+  },
+  "stats": {
+    "productCount": 35,
+    "activeProducts": 33,
+    "limitedProducts": 28,
+    "unlimitedProducts": 5,
+    "totalStock": 850,
+    "lowStockProducts": 7,
+    "averagePrice": 459.99
+  },
+  "message": "Estadísticas obtenidas exitosamente"
+}
+```
+
+**Estadísticas incluidas:**
+- `productCount` - Total de productos de la marca
+- `activeProducts` - Productos activos (no eliminados)
+- `limitedProducts` - Productos con disponibilidad limitada
+- `unlimitedProducts` - Productos con disponibilidad ilimitada
+- `totalStock` - Stock total de todos los productos
+- `lowStockProducts` - Productos con stock bajo
+- `averagePrice` - Precio promedio de los productos
+
+### Integración de Marcas con Inventario
+
+#### Crear Producto con Marca Validada
+
+Al crear un producto, **la marca debe existir previamente si se especifica**:
+
+```bash
+# 1. Primero crear la marca
+curl -X POST http://localhost:3000/brands \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Samsung"
+  }'
+
+# 2. Luego crear el producto
+curl -X POST http://localhost:3000/inventory \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Samsung Galaxy S24",
+    "description": "Smartphone de última generación",
+    "price": 999.99,
+    "availability": "limited",
+    "category": "Electrónica",
+    "brand": "Samsung",
+    "stock": 15
+  }'
+```
+
+**Si la marca no existe:**
+```json
+{
+  "success": false,
+  "message": "La marca especificada no existe. Por favor, créala primero en /brands"
+}
+```
+
+#### Filtrar Productos por Marca
+
+```bash
+# Obtener todos los productos de una marca
+curl -X GET "http://localhost:3000/inventory?brand=Samsung" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+
+# Combinar filtros: marca + categoría
+curl -X GET "http://localhost:3000/inventory?brand=Samsung&category=Electrónica" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+```
+
+#### Actualización Automática de Contadores
+
+El sistema actualiza automáticamente el contador `productCount`:
+
+**Al crear un producto:**
+- ➕ Se incrementa `productCount` de la marca
+
+**Al actualizar la marca de un producto:**
+- ➖ Se decrementa `productCount` de la marca anterior
+- ➕ Se incrementa `productCount` de la nueva marca
+
+**Al eliminar un producto:**
+- ➖ Se decrementa `productCount` de la marca
+
+#### Renombrar Marca en Todos los Productos
+
+Cuando actualizas el nombre de una marca, **todos los productos se actualizan automáticamente**:
+
+```bash
+# Cambiar nombre de "Samsung" a "Samsung Electronics"
+curl -X PUT http://localhost:3000/brands/brand_123 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Samsung Electronics"
+  }'
+```
+
+Resultado:
+- ✅ Marca renombrada
+- ✅ Todos los productos con `brand: "Samsung"` ahora tienen `brand: "Samsung Electronics"`
+- ✅ Actualización en cascada automática
+
+### Validaciones del Sistema de Marcas
+
+#### Errores Comunes
+
+**1. Nombre requerido:**
+```json
+{
+  "success": false,
+  "message": "El nombre de la marca es requerido"
+}
+```
+
+**2. Marca duplicada:**
+```json
+{
+  "success": false,
+  "message": "Ya existe una marca con ese nombre"
+}
+```
+
+**3. Marca no encontrada:**
+```json
+{
+  "success": false,
+  "message": "Marca no encontrada"
+}
+```
+
+**4. No se puede eliminar con productos:**
+```json
+{
+  "success": false,
+  "message": "No se puede eliminar la marca porque tiene 35 producto(s) asociado(s)"
+}
+```
+
+**5. Sin permisos de administrador:**
+```json
+{
+  "error": "Acceso denegado. Se requieren permisos de administrador"
+}
+```
+
+### 🚚 Ejemplos de Gestión de Proveedores
+
+#### Listar Todos los Proveedores (GET /suppliers)
+
+```bash
+# Listar todos los proveedores
+curl -X GET http://localhost:3000/suppliers \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+
+# Buscar proveedores
+curl -X GET "http://localhost:3000/suppliers?search=tecnología" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "suppliers": [
+    {
+      "id": "supplier_1699123456789_abc",
+      "name": "Distribuidora Tecnología S.A.",
+      "description": "Proveedor mayorista de electrónica",
+      "contactName": "Juan Pérez",
+      "email": "ventas@techdist.com",
+      "phone": "+52 55 1234 5678",
+      "address": "Av. Principal 123, CDMX",
+      "productCount": 42,
+      "isActive": true,
+      "createdAt": "2025-11-15T10:30:00Z",
+      "updatedAt": "2025-11-15T10:30:00Z",
+      "createdBy": "admin_uid"
+    },
+    {
+      "id": "supplier_1699123456789_def",
+      "name": "Importadora Global",
+      "description": "Importación de productos tecnológicos",
+      "contactName": "María García",
+      "email": "contacto@impglobal.com",
+      "phone": "+52 55 9876 5432",
+      "address": "Calle Comercio 456, Monterrey",
+      "productCount": 18,
+      "isActive": true,
+      "createdAt": "2025-11-15T11:00:00Z",
+      "updatedAt": "2025-11-15T11:00:00Z",
+      "createdBy": "admin_uid"
+    }
+  ],
+  "total": 2,
+  "message": "Se encontraron 2 proveedor(es)"
+}
+```
+
+**Campos de respuesta:**
+- `id` - ID único del proveedor
+- `name` - Nombre de la empresa proveedora
+- `description` - Descripción opcional
+- `contactName` - Nombre de la persona de contacto
+- `email` - Email de contacto
+- `phone` - Teléfono de contacto
+- `address` - Dirección física
+- `productCount` - Número de productos de este proveedor
+- `isActive` - Estado del proveedor (activo/inactivo)
+- `createdAt` - Fecha de creación
+- `updatedAt` - Fecha de última actualización
+- `createdBy` - ID del usuario que creó el proveedor
+
+#### Crear Nuevo Proveedor (POST /suppliers)
+
+**⚠️ Solo administradores**
+
+```bash
+# Proveedor con información completa
+curl -X POST http://localhost:3000/suppliers \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Distribuidora ABC S.A.",
+    "description": "Proveedor mayorista de productos varios",
+    "contactName": "Carlos Rodríguez",
+    "email": "ventas@distribuidoraabc.com",
+    "phone": "+52 55 1234 5678",
+    "address": "Av. Industrial 789, CDMX"
+  }'
+
+# Proveedor con datos mínimos
+curl -X POST http://localhost:3000/suppliers \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Proveedor XYZ"
+  }'
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "message": "Proveedor creado exitosamente",
+  "supplier": {
+    "id": "supplier_1699123456789_xyz",
+    "name": "Distribuidora ABC S.A.",
+    "description": "Proveedor mayorista de productos varios",
+    "contactName": "Carlos Rodríguez",
+    "email": "ventas@distribuidoraabc.com",
+    "phone": "+52 55 1234 5678",
+    "address": "Av. Industrial 789, CDMX",
+    "productCount": 0,
+    "isActive": true,
+    "createdAt": "2025-11-20T10:30:00Z",
+    "updatedAt": "2025-11-20T10:30:00Z",
+    "createdBy": "admin_uid"
+  }
+}
+```
+
+**Campos requeridos:**
+- `name` - Nombre del proveedor (único)
+
+**Campos opcionales:**
+- `description` - Descripción del proveedor
+- `contactName` - Nombre de la persona de contacto
+- `email` - Email de contacto (se valida formato)
+- `phone` - Teléfono de contacto
+- `address` - Dirección física del proveedor
+
+**Validaciones:**
+- ✅ El nombre es requerido y no puede estar vacío
+- ✅ El nombre debe ser único (case-insensitive)
+- ✅ El email debe tener formato válido si se proporciona
+- ✅ Solo administradores pueden crear proveedores
+
+#### Actualizar Proveedor (PUT /suppliers/:id)
+
+**⚠️ Solo administradores**
+
+```bash
+# Actualizar información completa
+curl -X PUT http://localhost:3000/suppliers/supplier_1699123456789_xyz \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Distribuidora ABC Internacional S.A.",
+    "description": "Proveedor mayorista internacional de productos varios",
+    "contactName": "Carlos Rodríguez Gómez",
+    "email": "ventas.internacional@distribuidoraabc.com",
+    "phone": "+52 55 1234 5678 ext. 102",
+    "address": "Av. Industrial 789, Col. Centro, CDMX",
+    "isActive": true
+  }'
+
+# Actualizar solo algunos campos
+curl -X PUT http://localhost:3000/suppliers/supplier_1699123456789_xyz \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "email": "nuevoemail@distribuidoraabc.com",
+    "phone": "+52 55 8888 9999"
+  }'
+
+# Desactivar proveedor
+curl -X PUT http://localhost:3000/suppliers/supplier_1699123456789_xyz \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "isActive": false
+  }'
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "message": "Proveedor actualizado exitosamente",
+  "supplier": {
+    "id": "supplier_1699123456789_xyz",
+    "name": "Distribuidora ABC Internacional S.A.",
+    "description": "Proveedor mayorista internacional de productos varios",
+    "contactName": "Carlos Rodríguez Gómez",
+    "email": "ventas.internacional@distribuidoraabc.com",
+    "phone": "+52 55 1234 5678 ext. 102",
+    "address": "Av. Industrial 789, Col. Centro, CDMX",
+    "productCount": 15,
+    "isActive": true,
+    "createdAt": "2025-11-20T10:30:00Z",
+    "updatedAt": "2025-11-20T11:45:00Z",
+    "createdBy": "admin_uid",
+    "updatedBy": "admin_uid"
+  }
+}
+```
+
+**Características importantes:**
+- ✅ **Actualización en cascada**: Si cambias el nombre, se actualiza automáticamente en todos los productos
+- ✅ Validación de nombre único
+- ✅ Validación de formato de email
+- ✅ Control de estado activo/inactivo
+- ✅ Solo administradores pueden actualizar
+- ✅ Todos los campos son opcionales (solo se actualizan los proporcionados)
+
+#### Eliminar Proveedor (DELETE /suppliers/:id)
+
+**⚠️ Solo administradores**
+
+```bash
+curl -X DELETE http://localhost:3000/suppliers/supplier_1699123456789_xyz \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "message": "Proveedor eliminado exitosamente",
+  "supplierId": "supplier_1699123456789_xyz"
+}
+```
+
+**Error si tiene productos asociados:**
+```json
+{
+  "success": false,
+  "message": "No se puede eliminar el proveedor porque tiene 15 producto(s) asociado(s)"
+}
+```
+
+**Validaciones:**
+- ✅ No se puede eliminar un proveedor con productos asociados
+- ✅ Solo administradores pueden eliminar
+- ✅ Protección de integridad referencial
+
+#### Obtener Estadísticas de Proveedor (GET /suppliers/:id/stats)
+
+```bash
+curl -X GET http://localhost:3000/suppliers/supplier_1699123456789_xyz/stats \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "supplier": {
+    "id": "supplier_1699123456789_xyz",
+    "name": "Distribuidora ABC S.A.",
+    "description": "Proveedor mayorista de productos varios",
+    "contactName": "Carlos Rodríguez",
+    "email": "ventas@distribuidoraabc.com",
+    "phone": "+52 55 1234 5678",
+    "address": "Av. Industrial 789, CDMX",
+    "productCount": 42,
+    "isActive": true,
+    "createdAt": "2025-11-20T10:30:00Z",
+    "updatedAt": "2025-11-20T10:30:00Z",
+    "createdBy": "admin_uid"
+  },
+  "stats": {
+    "productCount": 42,
+    "activeProducts": 40,
+    "limitedProducts": 35,
+    "unlimitedProducts": 5,
+    "totalStock": 1250,
+    "lowStockProducts": 8,
+    "averagePrice": 349.99
+  },
+  "message": "Estadísticas obtenidas exitosamente"
+}
+```
+
+**Estadísticas incluidas:**
+- `productCount` - Total de productos del proveedor
+- `activeProducts` - Productos activos (no eliminados)
+- `limitedProducts` - Productos con disponibilidad limitada
+- `unlimitedProducts` - Productos con disponibilidad ilimitada
+- `totalStock` - Stock total de todos los productos
+- `lowStockProducts` - Productos con stock bajo
+- `averagePrice` - Precio promedio de los productos
+
+### Integración de Proveedores con Inventario
+
+#### Crear Producto con Proveedor Validado
+
+Al crear un producto, **el proveedor debe existir previamente si se especifica**:
+
+```bash
+# 1. Primero crear el proveedor
+curl -X POST http://localhost:3000/suppliers \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Distribuidora XYZ",
+    "email": "ventas@xyz.com"
+  }'
+
+# 2. Luego crear el producto
+curl -X POST http://localhost:3000/inventory \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Producto Importado",
+    "description": "Producto traído por distribuidor",
+    "price": 299.99,
+    "availability": "limited",
+    "category": "Electrónica",
+    "brand": "Samsung",
+    "supplier": "Distribuidora XYZ",
+    "stock": 20
+  }'
+```
+
+**Si el proveedor no existe:**
+```json
+{
+  "success": false,
+  "message": "El proveedor especificado no existe. Por favor, créalo primero en /suppliers"
+}
+```
+
+#### Filtrar Productos por Proveedor
+
+```bash
+# Obtener todos los productos de un proveedor
+curl -X GET "http://localhost:3000/inventory?supplier=Distribuidora%20XYZ" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+
+# Combinar filtros: proveedor + marca + categoría
+curl -X GET "http://localhost:3000/inventory?supplier=Distribuidora%20XYZ&brand=Samsung&category=Electrónica" \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+```
+
+#### Actualización Automática de Contadores
+
+El sistema actualiza automáticamente el contador `productCount`:
+
+**Al crear un producto:**
+- ➕ Se incrementa `productCount` del proveedor
+
+**Al actualizar el proveedor de un producto:**
+- ➖ Se decrementa `productCount` del proveedor anterior
+- ➕ Se incrementa `productCount` del nuevo proveedor
+
+**Al eliminar un producto:**
+- ➖ Se decrementa `productCount` del proveedor
+
+#### Renombrar Proveedor en Todos los Productos
+
+Cuando actualizas el nombre de un proveedor, **todos los productos se actualizan automáticamente**:
+
+```bash
+# Cambiar nombre de "Distribuidora XYZ" a "Distribuidora XYZ Internacional"
+curl -X PUT http://localhost:3000/suppliers/supplier_123 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Distribuidora XYZ Internacional"
+  }'
+```
+
+Resultado:
+- ✅ Proveedor renombrado
+- ✅ Todos los productos con `supplier: "Distribuidora XYZ"` ahora tienen `supplier: "Distribuidora XYZ Internacional"`
+- ✅ Actualización en cascada automática
+
+### Validaciones del Sistema de Proveedores
+
+#### Errores Comunes
+
+**1. Nombre requerido:**
+```json
+{
+  "success": false,
+  "message": "El nombre del proveedor es requerido"
+}
+```
+
+**2. Proveedor duplicado:**
+```json
+{
+  "success": false,
+  "message": "Ya existe un proveedor con ese nombre"
+}
+```
+
+**3. Email inválido:**
+```json
+{
+  "success": false,
+  "message": "El formato del email no es válido"
+}
+```
+
+**4. Proveedor no encontrado:**
+```json
+{
+  "success": false,
+  "message": "Proveedor no encontrado"
+}
+```
+
+**5. No se puede eliminar con productos:**
+```json
+{
+  "success": false,
+  "message": "No se puede eliminar el proveedor porque tiene 42 producto(s) asociado(s)"
+}
+```
+
+**6. Sin permisos de administrador:**
+```json
+{
+  "error": "Acceso denegado. Se requieren permisos de administrador"
+}
+```
+
+### Ejemplo Completo: Crear Producto con Categoría, Marca y Proveedor
+
+```bash
+# Paso 1: Crear categoría
+curl -X POST http://localhost:3000/categories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Electrónica",
+    "description": "Productos electrónicos y tecnología"
+  }'
+
+# Paso 2: Crear marca
+curl -X POST http://localhost:3000/brands \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Samsung",
+    "description": "Productos Samsung"
+  }'
+
+# Paso 3: Crear proveedor
+curl -X POST http://localhost:3000/suppliers \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Tech Import S.A.",
+    "description": "Importador de electrónica",
+    "contactName": "Juan Pérez",
+    "email": "ventas@techimport.com",
+    "phone": "+52 55 1234 5678"
+  }'
+
+# Paso 4: Crear producto con toda la información
+curl -X POST http://localhost:3000/inventory \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -d '{
+    "name": "Samsung Galaxy S24 Ultra",
+    "description": "Smartphone flagship con 512GB",
+    "price": 1299.99,
+    "promotionalPrice": 1199.99,
+    "availability": "limited",
+    "category": "Electrónica",
+    "brand": "Samsung",
+    "supplier": "Tech Import S.A.",
+    "stock": 25,
+    "barcode": "8806095184234",
+    "supplierCode": "SGS24U-512-BLK"
+  }'
+```
+
+**Respuesta final del producto:**
+```json
+{
+  "success": true,
+  "product": {
+    "id": "product_1732089600000_abc123",
+    "name": "Samsung Galaxy S24 Ultra",
+    "description": "Smartphone flagship con 512GB",
+    "price": 1299.99,
+    "promotionalPrice": 1199.99,
+    "availability": "limited",
+    "category": "Electrónica",
+    "brand": "Samsung",
+    "supplier": "Tech Import S.A.",
+    "stock": 25,
+    "barcode": "8806095184234",
+    "supplierCode": "SGS24U-512-BLK",
+    "imageUrl": null,
+    "isActive": true,
+    "createdAt": "2025-11-20T10:00:00.000Z",
+    "updatedAt": "2025-11-20T10:00:00.000Z",
+    "createdBy": "admin_uid"
+  },
+  "message": "Producto creado exitosamente"
+}
+```
+
+**🎯 Consultas combinadas:**
+
+```bash
+# Buscar todos los productos Samsung de Electrónica del proveedor Tech Import
+curl -X GET "http://localhost:3000/inventory?category=Electrónica&brand=Samsung&supplier=Tech%20Import%20S.A." \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+
+# Obtener estadísticas de cada entidad
+curl -X GET http://localhost:3000/categories/cat_123/stats \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+
+curl -X GET http://localhost:3000/brands/brand_456/stats \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
+
+curl -X GET http://localhost:3000/suppliers/supplier_789/stats \
+  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN"
 ```
 
 ### 💰 Ejemplos de Ventas

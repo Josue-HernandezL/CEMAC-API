@@ -12,6 +12,8 @@ const salesRoutes = require('./backend/routes/salesRoutes');
 const analysisRoutes = require('./backend/routes/analysisRoutes');
 const customersRoutes = require('./backend/routes/customersRoutes');
 const categoriesRoutes = require('./backend/routes/categoriesRoutes');
+const brandsRoutes = require('./backend/routes/brandsRoutes');
+const suppliersRoutes = require('./backend/routes/suppliersRoutes');
 const alertsRoutes = require('./backend/routes/alertsRoutes');
 
 const app = express();
@@ -42,6 +44,8 @@ app.use('/sales', salesRoutes);
 app.use('/analysis', analysisRoutes);
 app.use('/customers', customersRoutes);
 app.use('/categories', categoriesRoutes);
+app.use('/brands', brandsRoutes);
+app.use('/suppliers', suppliersRoutes);
 app.use('/alerts', alertsRoutes);
 
 // Ruta de prueba
