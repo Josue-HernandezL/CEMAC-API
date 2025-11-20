@@ -83,7 +83,9 @@ const getProducts = async (req, res) => {
     const { 
       search, 
       category, 
-      availability, 
+      availability,
+      supplier,
+      brand,
       minPrice, 
       maxPrice, 
       page = 1, 
@@ -104,14 +106,15 @@ const getProducts = async (req, res) => {
     // Aplicar filtros
     let filteredProducts = products.filter(product => product.isActive !== false);
 
-    // Filtro por búsqueda en nombre, descripción, código de barras y código de proveedor
+    // Filtro por búsqueda en nombre, descripción, código de barras, código de proveedor, marca
     if (search) {
       const searchTerm = search.toLowerCase();
       filteredProducts = filteredProducts.filter(product => 
         (product.name && product.name.toLowerCase().includes(searchTerm)) ||
         (product.description && product.description.toLowerCase().includes(searchTerm)) ||
         (product.barcode && product.barcode.toLowerCase().includes(searchTerm)) ||
-        (product.supplierCode && product.supplierCode.toLowerCase().includes(searchTerm))
+        (product.supplierCode && product.supplierCode.toLowerCase().includes(searchTerm)) ||
+        (product.brand && product.brand.toLowerCase().includes(searchTerm)
       );
     }
 
@@ -238,6 +241,7 @@ const createProduct = async (req, res) => {
       stock, 
       barcode, 
       supplierCode,
+      brand,
       // Nuevos campos para manejo de cajas
       unitsPerBox,
       boxStock
@@ -343,6 +347,7 @@ const createProduct = async (req, res) => {
       stock: availability === 'limited' ? finalStock : null,
       barcode: barcode ? barcode.trim() : null,
       supplierCode: supplierCode ? supplierCode.trim() : null,
+      brand: brand ? brand.trim() : null
       // Campos de cajas (opcionales)
       unitsPerBox: finalUnitsPerBox,
       boxStock: finalBoxStock,
@@ -455,6 +460,7 @@ const updateProduct = async (req, res) => {
       stock, 
       barcode, 
       supplierCode,
+      brand,
       // Campos de cajas
       unitsPerBox,
       boxStock
@@ -570,6 +576,7 @@ const updateProduct = async (req, res) => {
     
     if (barcode !== undefined) updatedData.barcode = barcode ? barcode.trim() : null;
     if (supplierCode !== undefined) updatedData.supplierCode = supplierCode ? supplierCode.trim() : null;
+    if (brand !== undefined) updateData.brand = brand ? brand.trim() : null
     if (imageUrl !== undefined) {
       updatedData.imageUrl = imageUrl;
     }
