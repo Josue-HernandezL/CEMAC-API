@@ -82,7 +82,9 @@ const getProducts = async (req, res) => {
   try {
     const { 
       search, 
-      category, 
+      category,
+      brand,
+      supplier,
       availability, 
       minPrice, 
       maxPrice, 
@@ -119,6 +121,20 @@ const getProducts = async (req, res) => {
     if (category) {
       filteredProducts = filteredProducts.filter(product => 
         product.category && product.category.toLowerCase() === category.toLowerCase()
+      );
+    }
+
+    // Filtro por marca
+    if (brand) {
+      filteredProducts = filteredProducts.filter(product => 
+        product.brand && product.brand.toLowerCase() === brand.toLowerCase()
+      );
+    }
+
+    // Filtro por proveedor
+    if (supplier) {
+      filteredProducts = filteredProducts.filter(product => 
+        product.supplier && product.supplier.toLowerCase() === supplier.toLowerCase()
       );
     }
 
@@ -206,6 +222,8 @@ const getProducts = async (req, res) => {
       filters: {
         search,
         category,
+        brand,
+        supplier,
         availability,
         minPrice,
         maxPrice,
@@ -235,6 +253,8 @@ const createProduct = async (req, res) => {
       promotionalPrice, 
       availability, 
       category, 
+      brand,
+      supplier,
       stock, 
       barcode, 
       supplierCode,
@@ -314,6 +334,48 @@ const createProduct = async (req, res) => {
       }
     }
 
+    // Validar que la marca exista si se proporciona
+    if (brand && brand.trim() !== '') {
+      const brandsRef = db.ref('inventory/brands');
+      const brandsSnapshot = await brandsRef.once('value');
+      
+      let brandExists = false;
+      if (brandsSnapshot.exists()) {
+        const brands = Object.values(brandsSnapshot.val());
+        brandExists = brands.some(b => 
+          b.name.toLowerCase() === brand.trim().toLowerCase()
+        );
+      }
+
+      if (!brandExists) {
+        return res.status(400).json({
+          success: false,
+          message: 'La marca especificada no existe. Por favor, créala primero en /brands'
+        });
+      }
+    }
+
+    // Validar que el proveedor exista si se proporciona
+    if (supplier && supplier.trim() !== '') {
+      const suppliersRef = db.ref('inventory/suppliers');
+      const suppliersSnapshot = await suppliersRef.once('value');
+      
+      let supplierExists = false;
+      if (suppliersSnapshot.exists()) {
+        const suppliers = Object.values(suppliersSnapshot.val());
+        supplierExists = suppliers.some(s => 
+          s.name.toLowerCase() === supplier.trim().toLowerCase()
+        );
+      }
+
+      if (!supplierExists) {
+        return res.status(400).json({
+          success: false,
+          message: 'El proveedor especificado no existe. Por favor, créalo primero en /suppliers'
+        });
+      }
+    }
+
     const productId = generateId();
     let imageUrl = null;
 
@@ -340,6 +402,8 @@ const createProduct = async (req, res) => {
       promotionalPrice: promotionalPrice ? parseFloat(promotionalPrice) : null,
       availability,
       category: category ? category.trim() : null,
+      brand: brand ? brand.trim() : null,
+      supplier: supplier ? supplier.trim() : null,
       stock: availability === 'limited' ? finalStock : null,
       barcode: barcode ? barcode.trim() : null,
       supplierCode: supplierCode ? supplierCode.trim() : null,
@@ -372,6 +436,46 @@ const createProduct = async (req, res) => {
           const [categoryId, categoryData] = categoryEntry;
           await db.ref(`inventory/categories/${categoryId}`).update({
             productCount: (categoryData.productCount || 0) + 1
+          });
+        }
+      }
+    }
+
+    // Actualizar contador de productos en la marca
+    if (brand && brand.trim() !== '') {
+      const brandsRef = db.ref('inventory/brands');
+      const brandsSnapshot = await brandsRef.once('value');
+      
+      if (brandsSnapshot.exists()) {
+        const brands = brandsSnapshot.val();
+        const brandEntry = Object.entries(brands).find(([id, b]) => 
+          b.name.toLowerCase() === brand.trim().toLowerCase()
+        );
+        
+        if (brandEntry) {
+          const [brandId, brandData] = brandEntry;
+          await db.ref(`inventory/brands/${brandId}`).update({
+            productCount: (brandData.productCount || 0) + 1
+          });
+        }
+      }
+    }
+
+    // Actualizar contador de productos en el proveedor
+    if (supplier && supplier.trim() !== '') {
+      const suppliersRef = db.ref('inventory/suppliers');
+      const suppliersSnapshot = await suppliersRef.once('value');
+      
+      if (suppliersSnapshot.exists()) {
+        const suppliers = suppliersSnapshot.val();
+        const supplierEntry = Object.entries(suppliers).find(([id, s]) => 
+          s.name.toLowerCase() === supplier.trim().toLowerCase()
+        );
+        
+        if (supplierEntry) {
+          const [supplierId, supplierData] = supplierEntry;
+          await db.ref(`inventory/suppliers/${supplierId}`).update({
+            productCount: (supplierData.productCount || 0) + 1
           });
         }
       }
@@ -451,7 +555,9 @@ const updateProduct = async (req, res) => {
       price, 
       promotionalPrice, 
       availability, 
-      category, 
+      category,
+      brand,
+      supplier,
       stock, 
       barcode, 
       supplierCode,
@@ -511,6 +617,50 @@ const updateProduct = async (req, res) => {
       }
     }
 
+    // Validar que la marca exista si se proporciona y cambió
+    if (brand !== undefined && brand && brand.trim() !== '' && 
+        brand.trim() !== currentProduct.brand) {
+      const brandsRef = db.ref('inventory/brands');
+      const brandsSnapshot = await brandsRef.once('value');
+      
+      let brandExists = false;
+      if (brandsSnapshot.exists()) {
+        const brands = Object.values(brandsSnapshot.val());
+        brandExists = brands.some(b => 
+          b.name.toLowerCase() === brand.trim().toLowerCase()
+        );
+      }
+
+      if (!brandExists) {
+        return res.status(400).json({
+          success: false,
+          message: 'La marca especificada no existe. Por favor, créala primero en /brands'
+        });
+      }
+    }
+
+    // Validar que el proveedor exista si se proporciona y cambió
+    if (supplier !== undefined && supplier && supplier.trim() !== '' && 
+        supplier.trim() !== currentProduct.supplier) {
+      const suppliersRef = db.ref('inventory/suppliers');
+      const suppliersSnapshot = await suppliersRef.once('value');
+      
+      let supplierExists = false;
+      if (suppliersSnapshot.exists()) {
+        const suppliers = Object.values(suppliersSnapshot.val());
+        supplierExists = suppliers.some(s => 
+          s.name.toLowerCase() === supplier.trim().toLowerCase()
+        );
+      }
+
+      if (!supplierExists) {
+        return res.status(400).json({
+          success: false,
+          message: 'El proveedor especificado no existe. Por favor, créalo primero en /suppliers'
+        });
+      }
+    }
+
     let imageUrl = currentProduct.imageUrl;
 
     // Subir nueva imagen si se proporciona
@@ -543,6 +693,8 @@ const updateProduct = async (req, res) => {
     }
     if (availability !== undefined) updatedData.availability = availability;
     if (category !== undefined) updatedData.category = category ? category.trim() : null;
+    if (brand !== undefined) updatedData.brand = brand ? brand.trim() : null;
+    if (supplier !== undefined) updatedData.supplier = supplier ? supplier.trim() : null;
     
     // Manejo de cajas y stock
     if (unitsPerBox !== undefined) {
@@ -606,6 +758,82 @@ const updateProduct = async (req, res) => {
             const [newCategoryId, newCategoryData] = newCategoryEntry;
             await db.ref(`inventory/categories/${newCategoryId}`).update({
               productCount: (newCategoryData.productCount || 0) + 1
+            });
+          }
+        }
+      }
+    }
+
+    // Actualizar contadores de marcas si cambió la marca
+    if (brand !== undefined && brand !== currentProduct.brand) {
+      const brandsRef = db.ref('inventory/brands');
+      const brandsSnapshot = await brandsRef.once('value');
+      
+      if (brandsSnapshot.exists()) {
+        const brands = brandsSnapshot.val();
+        
+        // Decrementar contador de marca anterior
+        if (currentProduct.brand) {
+          const oldBrandEntry = Object.entries(brands).find(([id, b]) => 
+            b.name.toLowerCase() === currentProduct.brand.toLowerCase()
+          );
+          
+          if (oldBrandEntry) {
+            const [oldBrandId, oldBrandData] = oldBrandEntry;
+            await db.ref(`inventory/brands/${oldBrandId}`).update({
+              productCount: Math.max((oldBrandData.productCount || 1) - 1, 0)
+            });
+          }
+        }
+        
+        // Incrementar contador de nueva marca
+        if (brand && brand.trim() !== '') {
+          const newBrandEntry = Object.entries(brands).find(([id, b]) => 
+            b.name.toLowerCase() === brand.trim().toLowerCase()
+          );
+          
+          if (newBrandEntry) {
+            const [newBrandId, newBrandData] = newBrandEntry;
+            await db.ref(`inventory/brands/${newBrandId}`).update({
+              productCount: (newBrandData.productCount || 0) + 1
+            });
+          }
+        }
+      }
+    }
+
+    // Actualizar contadores de proveedores si cambió el proveedor
+    if (supplier !== undefined && supplier !== currentProduct.supplier) {
+      const suppliersRef = db.ref('inventory/suppliers');
+      const suppliersSnapshot = await suppliersRef.once('value');
+      
+      if (suppliersSnapshot.exists()) {
+        const suppliers = suppliersSnapshot.val();
+        
+        // Decrementar contador de proveedor anterior
+        if (currentProduct.supplier) {
+          const oldSupplierEntry = Object.entries(suppliers).find(([id, s]) => 
+            s.name.toLowerCase() === currentProduct.supplier.toLowerCase()
+          );
+          
+          if (oldSupplierEntry) {
+            const [oldSupplierId, oldSupplierData] = oldSupplierEntry;
+            await db.ref(`inventory/suppliers/${oldSupplierId}`).update({
+              productCount: Math.max((oldSupplierData.productCount || 1) - 1, 0)
+            });
+          }
+        }
+        
+        // Incrementar contador de nuevo proveedor
+        if (supplier && supplier.trim() !== '') {
+          const newSupplierEntry = Object.entries(suppliers).find(([id, s]) => 
+            s.name.toLowerCase() === supplier.trim().toLowerCase()
+          );
+          
+          if (newSupplierEntry) {
+            const [newSupplierId, newSupplierData] = newSupplierEntry;
+            await db.ref(`inventory/suppliers/${newSupplierId}`).update({
+              productCount: (newSupplierData.productCount || 0) + 1
             });
           }
         }
@@ -682,6 +910,46 @@ const deleteProduct = async (req, res) => {
           const [categoryId, categoryData] = categoryEntry;
           await db.ref(`inventory/categories/${categoryId}`).update({
             productCount: Math.max((categoryData.productCount || 1) - 1, 0)
+          });
+        }
+      }
+    }
+
+    // Decrementar contador de marca
+    if (product.brand) {
+      const brandsRef = db.ref('inventory/brands');
+      const brandsSnapshot = await brandsRef.once('value');
+      
+      if (brandsSnapshot.exists()) {
+        const brands = brandsSnapshot.val();
+        const brandEntry = Object.entries(brands).find(([id, b]) => 
+          b.name.toLowerCase() === product.brand.toLowerCase()
+        );
+        
+        if (brandEntry) {
+          const [brandId, brandData] = brandEntry;
+          await db.ref(`inventory/brands/${brandId}`).update({
+            productCount: Math.max((brandData.productCount || 1) - 1, 0)
+          });
+        }
+      }
+    }
+
+    // Decrementar contador de proveedor
+    if (product.supplier) {
+      const suppliersRef = db.ref('inventory/suppliers');
+      const suppliersSnapshot = await suppliersRef.once('value');
+      
+      if (suppliersSnapshot.exists()) {
+        const suppliers = suppliersSnapshot.val();
+        const supplierEntry = Object.entries(suppliers).find(([id, s]) => 
+          s.name.toLowerCase() === product.supplier.toLowerCase()
+        );
+        
+        if (supplierEntry) {
+          const [supplierId, supplierData] = supplierEntry;
+          await db.ref(`inventory/suppliers/${supplierId}`).update({
+            productCount: Math.max((supplierData.productCount || 1) - 1, 0)
           });
         }
       }
